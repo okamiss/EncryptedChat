@@ -1,0 +1,12 @@
+node_modules
+dist
+coverage
+.git
+.codex-logs
+apps/api/dist
+apps/web/dist
+packages/shared/dist
+apps/api/uploads
+*.log
+.env
+.env.*

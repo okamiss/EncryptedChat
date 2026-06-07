@@ -1,0 +1,32 @@
+{
+  "name": "@encrypted-chat/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ant-design/icons": "^5.0.0",
+    "@encrypted-chat/shared": "file:../../packages/shared",
+    "@vitejs/plugin-react": "^5.1.1",
+    "antd": "^5.0.0",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1",
+    "react-router-dom": "^7.9.6",
+    "socket.io-client": "^4.8.1",
+    "vite": "^7.2.4"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.0",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "jsdom": "^27.2.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.15"
+  }
+}

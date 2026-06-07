@@ -1,0 +1,148 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum FriendRequestStatus {
+  pending
+  accepted
+  rejected
+}
+
+enum GroupMemberRole {
+  owner
+  member
+}
+
+enum FileScopeType {
+  direct
+  group
+}
+
+model User {
+  id        String   @id @default(uuid()) @db.Uuid
+  uid       String   @unique @db.VarChar(10)
+  username  String   @unique @db.VarChar(64)
+  passwordHash String @map("password_hash")
+  publicKey Json     @map("public_key")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  requestedFriendRequests FriendRequest[] @relation("FriendRequestRequester")
+  receivedFriendRequests  FriendRequest[] @relation("FriendRequestAddressee")
+  friendshipsA            Friendship[]    @relation("FriendshipUserA")
+  friendshipsB            Friendship[]    @relation("FriendshipUserB")
+  ownedGroups             Group[]         @relation("GroupOwner")
+  groupMembers            GroupMember[]
+  sentGroupInvites        GroupInvite[]   @relation("GroupInviteInviter")
+  receivedGroupInvites    GroupInvite[]   @relation("GroupInviteInvitee")
+  encryptedFiles          EncryptedFile[] @relation("EncryptedFileOwner")
+  directFilesReceived     EncryptedFile[] @relation("EncryptedFileTargetUser")
+
+  @@map("users")
+}
+
+model FriendRequest {
+  id          String              @id @default(uuid()) @db.Uuid
+  requesterId String              @map("requester_id") @db.Uuid
+  addresseeId String              @map("addressee_id") @db.Uuid
+  status      FriendRequestStatus @default(pending)
+  createdAt   DateTime            @default(now()) @map("created_at")
+  respondedAt DateTime?           @map("responded_at")
+
+  requester User @relation("FriendRequestRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  addressee User @relation("FriendRequestAddressee", fields: [addresseeId], references: [id], onDelete: Cascade)
+
+  @@unique([requesterId, addresseeId, status])
+  @@index([addresseeId, status])
+  @@map("friend_requests")
+}
+
+model Friendship {
+  id        String   @id @default(uuid()) @db.Uuid
+  userAId   String   @map("user_a_id") @db.Uuid
+  userBId   String   @map("user_b_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  userA User @relation("FriendshipUserA", fields: [userAId], references: [id], onDelete: Cascade)
+  userB User @relation("FriendshipUserB", fields: [userBId], references: [id], onDelete: Cascade)
+
+  @@unique([userAId, userBId])
+  @@index([userBId])
+  @@map("friendships")
+}
+
+model Group {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @db.VarChar(80)
+  ownerId   String   @map("owner_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  owner   User          @relation("GroupOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members GroupMember[]
+  invites GroupInvite[]
+  files   EncryptedFile[]
+
+  @@map("groups")
+}
+
+model GroupMember {
+  groupId           String          @map("group_id") @db.Uuid
+  userId            String          @map("user_id") @db.Uuid
+  role              GroupMemberRole @default(member)
+  encryptedGroupKey String          @map("encrypted_group_key")
+  keyVersion        Int             @default(1) @map("key_version")
+  joinedAt          DateTime        @default(now()) @map("joined_at")
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, userId])
+  @@index([userId])
+  @@map("group_members")
+}
+
+model GroupInvite {
+  id                String              @id @default(uuid()) @db.Uuid
+  groupId           String              @map("group_id") @db.Uuid
+  inviterId         String              @map("inviter_id") @db.Uuid
+  inviteeId         String              @map("invitee_id") @db.Uuid
+  encryptedGroupKey String              @map("encrypted_group_key")
+  keyVersion        Int                 @default(1) @map("key_version")
+  status            FriendRequestStatus @default(pending)
+  createdAt         DateTime            @default(now()) @map("created_at")
+  respondedAt       DateTime?           @map("responded_at")
+
+  group   Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  inviter User  @relation("GroupInviteInviter", fields: [inviterId], references: [id], onDelete: Cascade)
+  invitee User  @relation("GroupInviteInvitee", fields: [inviteeId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, inviteeId, status])
+  @@index([inviteeId, status])
+  @@map("group_invites")
+}
+
+model EncryptedFile {
+  id           String        @id @default(uuid()) @db.Uuid
+  ownerId      String        @map("owner_id") @db.Uuid
+  scopeType    FileScopeType @map("scope_type")
+  targetUserId String?       @map("target_user_id") @db.Uuid
+  groupId      String?       @map("group_id") @db.Uuid
+  storagePath  String        @map("storage_path")
+  size         Int
+  sha256       String        @db.VarChar(64)
+  createdAt    DateTime      @default(now()) @map("created_at")
+  expiresAt    DateTime?     @map("expires_at")
+
+  owner      User   @relation("EncryptedFileOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  targetUser User?  @relation("EncryptedFileTargetUser", fields: [targetUserId], references: [id], onDelete: Cascade)
+  group      Group? @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
+  @@index([targetUserId])
+  @@index([groupId])
+  @@map("encrypted_files")
+}

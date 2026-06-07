@@ -1,0 +1,23 @@
+{
+  "name": "encrypted-chat",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "docker compose up --build",
+    "dev:detached": "docker compose up --build -d",
+    "dev:down": "docker compose down",
+    "dev:local": "concurrently \"npm run dev -w @encrypted-chat/api\" \"npm run dev -w @encrypted-chat/web\"",
+    "build": "npm run build -w @encrypted-chat/shared && npm run build -w @encrypted-chat/api && npm run build -w @encrypted-chat/web",
+    "test": "npm run test -w @encrypted-chat/shared && npm run test -w @encrypted-chat/api && npm run test -w @encrypted-chat/web",
+    "prisma:generate": "npm run prisma:generate -w @encrypted-chat/api",
+    "prisma:migrate": "npm run prisma:migrate -w @encrypted-chat/api"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "typescript": "^5.9.3"
+  }
+}

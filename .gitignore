@@ -1,0 +1,10 @@
+node_modules
+dist
+coverage
+.env
+.env.local
+.env.*.local
+apps/api/uploads
+apps/api/prisma/dev.db
+.codex-logs
+*.log
