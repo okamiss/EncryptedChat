@@ -10,6 +10,7 @@ import { decryptDirectMessage, encryptDirectMessage, type PlainMessage } from ".
 import * as api from "../services/api";
 import { useAuth } from "../state/AuthContext";
 import { appendLocalMessage, getLocalMessages } from "../storage/localMessages";
+import { displayUserName } from "../utils/displayName";
 
 export function ChatPage() {
   const { friendId = "" } = useParams();
@@ -73,7 +74,7 @@ export function ChatPage() {
       const views = await Promise.all(
         envelopes.map(async (envelope): Promise<RenderedMessage> => {
           const own = envelope.fromUserId === user.id;
-          const senderName = own ? "我" : friend.username;
+          const senderName = own ? "我" : displayUserName(friend);
           if (!privateKey) {
             return encryptedView(envelope, own, senderName);
           }
@@ -156,7 +157,7 @@ export function ChatPage() {
     <section className="surface chat-shell">
       <div className="chat-header">
         <Typography.Title level={3} style={{ margin: 0 }}>
-          {friend?.username ?? "单聊"}
+          {friend ? displayUserName(friend) : "单聊"}
         </Typography.Title>
         <Typography.Text type="secondary">{friend ? `UID ${friend.uid}` : "好友不存在或尚未加载"}</Typography.Text>
       </div>

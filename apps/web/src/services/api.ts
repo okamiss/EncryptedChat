@@ -44,6 +44,10 @@ export function updatePublicKey(client: ApiClient, publicKey: JsonWebKey) {
   return request<SafeUser>("/users/me/public-key", { method: "PATCH", body: { publicKey }, client });
 }
 
+export function updateDisplayName(client: ApiClient, displayName?: string | null) {
+  return request<SafeUser>("/users/me/display-name", { method: "PATCH", body: { displayName }, client });
+}
+
 export function findUserByUid(client: ApiClient, uid: string) {
   return request<SafeUser>(`/users/by-uid/${encodeURIComponent(uid)}`, { client });
 }

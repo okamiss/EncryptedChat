@@ -1,11 +1,19 @@
-import { KeyOutlined, ReloadOutlined, UserOutlined } from "@ant-design/icons";
+import { IdcardOutlined, KeyOutlined, ReloadOutlined, UserOutlined } from "@ant-design/icons";
 import { Button, Descriptions, Form, Input, Space, Typography, App } from "antd";
+import { useEffect } from "react";
+import * as api from "../services/api";
 import { useAuth } from "../state/AuthContext";
+import { displayUserName } from "../utils/displayName";
 
 export function ProfilePage() {
-  const { user, privateKeyStatus, unlockPrivateKey, refreshMe } = useAuth();
+  const { apiClient, user, privateKeyStatus, unlockPrivateKey, refreshMe } = useAuth();
   const { message } = App.useApp();
+  const [displayNameForm] = Form.useForm<{ displayName?: string }>();
   const publicKeyKid = (user?.publicKey as { kid?: string } | undefined)?.kid;
+
+  useEffect(() => {
+    displayNameForm.setFieldsValue({ displayName: user?.displayName ?? "" });
+  }, [displayNameForm, user?.displayName]);
 
   return (
     <section className="surface">
@@ -27,6 +35,12 @@ export function ProfilePage() {
               {user?.username}
             </Space>
           </Descriptions.Item>
+          <Descriptions.Item label="显示名称">
+            <Space>
+              <IdcardOutlined />
+              {user ? displayUserName(user) : "-"}
+            </Space>
+          </Descriptions.Item>
           <Descriptions.Item label="公钥状态">
             <Space>
               <KeyOutlined />
@@ -35,6 +49,26 @@ export function ProfilePage() {
           </Descriptions.Item>
           <Descriptions.Item label="本地私钥">{privateKeyStatus === "ready" ? "已解锁" : "未解锁"}</Descriptions.Item>
         </Descriptions>
+        <Form
+          form={displayNameForm}
+          layout="inline"
+          onFinish={async (values: { displayName?: string }) => {
+            try {
+              await api.updateDisplayName(apiClient, values.displayName);
+              await refreshMe();
+              message.success("显示名称已更新");
+            } catch (error) {
+              message.error(error instanceof Error ? error.message : "显示名称更新失败");
+            }
+          }}
+        >
+          <Form.Item name="displayName" label="花名/代号">
+            <Input maxLength={64} allowClear placeholder="留空则显示用户名" />
+          </Form.Item>
+          <Button type="primary" htmlType="submit" icon={<IdcardOutlined />} disabled={!user}>
+            保存显示名称
+          </Button>
+        </Form>
         {privateKeyStatus !== "ready" && (
           <Form
             layout="inline"

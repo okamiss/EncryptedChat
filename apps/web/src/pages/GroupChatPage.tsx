@@ -16,6 +16,7 @@ import {
 import * as api from "../services/api";
 import { useAuth } from "../state/AuthContext";
 import { appendLocalMessage, getLocalMessages } from "../storage/localMessages";
+import { displayUserName } from "../utils/displayName";
 
 export function GroupChatPage() {
   const { groupId = "" } = useParams();
@@ -98,9 +99,8 @@ export function GroupChatPage() {
       const views = await Promise.all(
         envelopes.map(async (envelope): Promise<RenderedMessage> => {
           const own = envelope.fromUserId === user.id;
-          const senderName = own
-            ? "我"
-            : group.members.find((member) => member.user.id === envelope.fromUserId)?.user.username ?? "群成员";
+          const sender = group.members.find((member) => member.user.id === envelope.fromUserId)?.user;
+          const senderName = own ? "我" : sender ? displayUserName(sender) : "群成员";
           if (!groupKey) {
             return encryptedView(envelope, own, senderName);
           }
@@ -183,7 +183,7 @@ export function GroupChatPage() {
 
   const inviteOptions = friends
     .filter((friend) => !group?.members.some((member) => member.user.id === friend.id))
-    .map((friend) => ({ label: `${friend.username} · ${friend.uid}`, value: friend.id }));
+    .map((friend) => ({ label: `${displayUserName(friend)} · ${friend.uid}`, value: friend.id }));
 
   return (
     <section className="surface chat-shell">

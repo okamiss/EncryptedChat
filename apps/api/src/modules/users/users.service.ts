@@ -31,4 +31,13 @@ export class UsersService {
     });
     return presentUser(user);
   }
+
+  async updateDisplayName(userId: string, displayName?: string | null): Promise<SafeUser> {
+    const normalized = displayName?.trim() || null;
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: { displayName: normalized }
+    });
+    return presentUser(user);
+  }
 }

@@ -1,5 +1,5 @@
-import { PictureOutlined, SendOutlined } from "@ant-design/icons";
-import { Button, Input, Space, Upload } from "antd";
+import { PictureOutlined, SendOutlined, SmileOutlined } from "@ant-design/icons";
+import { Button, Input, Popover, Space, Upload } from "antd";
 import { useState } from "react";
 
 interface ChatComposerProps {
@@ -8,9 +8,12 @@ interface ChatComposerProps {
   onSendImage: (file: File) => Promise<void>;
 }
 
+const SYSTEM_EMOJIS = ["😊", "😂", "😍", "👍", "🙏", "🎉", "❤️", "🔥", "😎", "😭", "🤔", "👌"];
+
 export function ChatComposer({ disabled, onSendText, onSendImage }: ChatComposerProps) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  const [emojiOpen, setEmojiOpen] = useState(false);
 
   const sendText = async () => {
     const trimmed = text.trim();
@@ -24,6 +27,11 @@ export function ChatComposer({ disabled, onSendText, onSendImage }: ChatComposer
     } finally {
       setSending(false);
     }
+  };
+
+  const insertEmoji = (emoji: string) => {
+    setText((current) => `${current}${emoji}`);
+    setEmojiOpen(false);
   };
 
   return (
@@ -42,6 +50,22 @@ export function ChatComposer({ disabled, onSendText, onSendImage }: ChatComposer
             }
           }}
         />
+        <Popover
+          trigger="click"
+          open={emojiOpen}
+          onOpenChange={setEmojiOpen}
+          content={
+            <div className="emoji-grid">
+              {SYSTEM_EMOJIS.map((emoji) => (
+                <button key={emoji} type="button" className="emoji-option" onClick={() => insertEmoji(emoji)}>
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          }
+        >
+          <Button aria-label="插入表情" icon={<SmileOutlined />} disabled={disabled || sending} />
+        </Popover>
         <Upload
           accept="image/*"
           showUploadList={false}
@@ -51,9 +75,16 @@ export function ChatComposer({ disabled, onSendText, onSendImage }: ChatComposer
             return Upload.LIST_IGNORE;
           }}
         >
-          <Button icon={<PictureOutlined />} disabled={disabled || sending} />
+          <Button aria-label="发送图片" icon={<PictureOutlined />} disabled={disabled || sending} />
         </Upload>
-        <Button type="primary" icon={<SendOutlined />} loading={sending} disabled={disabled} onClick={() => void sendText()} />
+        <Button
+          aria-label="发送"
+          type="primary"
+          icon={<SendOutlined />}
+          loading={sending}
+          disabled={disabled}
+          onClick={() => void sendText()}
+        />
       </Space.Compact>
     </div>
   );

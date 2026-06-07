@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Patch, UseGuards } from "@nestjs/common";
 import { CurrentUser } from "../../common/current-user.decorator";
 import type { AuthenticatedUser } from "../../common/authenticated-user";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { UpdateDisplayNameDto } from "./dto/update-display-name.dto";
 import { UpdatePublicKeyDto } from "./dto/update-public-key.dto";
 import { UsersService } from "./users.service";
 
@@ -23,5 +24,10 @@ export class UsersController {
   @Patch("me/public-key")
   updatePublicKey(@CurrentUser() user: AuthenticatedUser, @Body() body: UpdatePublicKeyDto) {
     return this.usersService.updatePublicKey(user.id, body.publicKey);
+  }
+
+  @Patch("me/display-name")
+  updateDisplayName(@CurrentUser() user: AuthenticatedUser, @Body() body: UpdateDisplayNameDto) {
+    return this.usersService.updateDisplayName(user.id, body.displayName);
   }
 }

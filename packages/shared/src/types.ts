@@ -10,6 +10,7 @@ export interface SafeUser {
   id: string;
   uid: string;
   username: string;
+  displayName?: string | null;
   publicKey: PublicJwk;
   createdAt: string;
 }
