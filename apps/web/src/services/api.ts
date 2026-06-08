@@ -13,6 +13,7 @@ import type {
   LoginRequest,
   RegisterRequest,
   SafeUser,
+  UpdateGroupMemberRoleRequest,
   UpdateGroupRequest,
   UploadEncryptedFileResponse
 } from "@encrypted-chat/shared";
@@ -80,6 +81,10 @@ export function listFriends(client: ApiClient) {
   return request<FriendView[]>("/friends", { client });
 }
 
+export function deleteFriend(client: ApiClient, id: string) {
+  return request<void>(`/friends/${id}`, { method: "DELETE", client });
+}
+
 export function createGroup(client: ApiClient, body: CreateGroupRequest) {
   return request<GroupView>("/groups", { method: "POST", body, client });
 }
@@ -94,6 +99,23 @@ export function getGroup(client: ApiClient, id: string) {
 
 export function updateGroup(client: ApiClient, id: string, body: UpdateGroupRequest) {
   return request<GroupView>(`/groups/${id}`, { method: "PATCH", body, client });
+}
+
+export function deleteGroup(client: ApiClient, id: string) {
+  return request<void>(`/groups/${id}`, { method: "DELETE", client });
+}
+
+export function updateGroupMemberRole(
+  client: ApiClient,
+  groupId: string,
+  userId: string,
+  body: UpdateGroupMemberRoleRequest
+) {
+  return request<GroupView>(`/groups/${groupId}/members/${userId}/role`, { method: "PATCH", body, client });
+}
+
+export function removeGroupMember(client: ApiClient, groupId: string, userId: string) {
+  return request<void>(`/groups/${groupId}/members/${userId}`, { method: "DELETE", client });
 }
 
 export function createGroupInvite(client: ApiClient, groupId: string, body: CreateGroupInviteRequest) {

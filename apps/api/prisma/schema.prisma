@@ -15,6 +15,7 @@ enum FriendRequestStatus {
 
 enum GroupMemberRole {
   owner
+  admin
   member
 }
 

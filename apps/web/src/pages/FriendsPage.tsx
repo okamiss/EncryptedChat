@@ -1,4 +1,5 @@
-import { CheckOutlined, MessageOutlined, ReloadOutlined, StopOutlined, UserAddOutlined } from "@ant-design/icons";
+import { CheckOutlined, DeleteOutlined, MessageOutlined, ReloadOutlined, StopOutlined, UserAddOutlined } from "@ant-design/icons";
+import { SocketEvents } from "@encrypted-chat/shared";
 import { App, Badge, Button, Empty, List, Space, Tabs, Typography } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -8,8 +9,8 @@ import * as api from "../services/api";
 import { displayUserName } from "../utils/displayName";
 
 export function FriendsPage() {
-  const { apiClient, unreadConversationKeys } = useAuth();
-  const { message } = App.useApp();
+  const { apiClient, socket, unreadConversationKeys } = useAuth();
+  const { message, modal } = App.useApp();
   const navigate = useNavigate();
   const [friends, setFriends] = useState<FriendView[]>([]);
   const [incoming, setIncoming] = useState<FriendRequestView[]>([]);
@@ -29,6 +30,19 @@ export function FriendsPage() {
   useEffect(() => {
     void load().catch((error) => message.error(error instanceof Error ? error.message : "加载好友失败"));
   }, [load, message]);
+
+  useEffect(() => {
+    if (!socket) {
+      return;
+    }
+    const handleFriendUpdated = () => {
+      void load();
+    };
+    socket.on(SocketEvents.FriendUpdated, handleFriendUpdated);
+    return () => {
+      socket.off(SocketEvents.FriendUpdated, handleFriendUpdated);
+    };
+  }, [load, socket]);
 
   return (
     <section className="surface">
@@ -65,6 +79,27 @@ export function FriendsPage() {
                           onClick={() => navigate(`/chats/${friend.id}`)}
                         >
                           聊天
+                        </Button>,
+                        <Button
+                          key="delete"
+                          danger
+                          icon={<DeleteOutlined />}
+                          onClick={() => {
+                            modal.confirm({
+                              title: "删除好友",
+                              content: `确认删除 ${displayUserName(friend)}？删除后双方好友列表都会消失。`,
+                              okText: "删除",
+                              okButtonProps: { danger: true },
+                              cancelText: "取消",
+                              onOk: async () => {
+                                await api.deleteFriend(apiClient, friend.id);
+                                message.success("已删除好友");
+                                await load();
+                              }
+                            });
+                          }}
+                        >
+                          删除
                         </Button>
                       ]}
                     >

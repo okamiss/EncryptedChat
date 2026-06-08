@@ -3,9 +3,10 @@ import type {
   CreateGroupInviteRequest,
   CreateGroupJoinRequestRequest,
   CreateGroupRequest,
+  UpdateGroupMemberRoleRequest,
   UpdateGroupRequest
 } from "@encrypted-chat/shared";
-import { IsInt, IsString, IsUUID, Length, Max, Min, MinLength } from "class-validator";
+import { IsIn, IsInt, IsString, IsUUID, Length, Max, Min, MinLength } from "class-validator";
 
 export class CreateGroupDto implements CreateGroupRequest {
   @IsString()
@@ -57,4 +58,9 @@ export class UpdateGroupDto implements UpdateGroupRequest {
   @IsString()
   @MinLength(1)
   groupName!: string;
+}
+
+export class UpdateGroupMemberRoleDto implements UpdateGroupMemberRoleRequest {
+  @IsIn(["admin", "member"])
+  role!: "admin" | "member";
 }

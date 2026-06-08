@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
-import type { GroupInviteView, GroupJoinRequestView, GroupView } from "@encrypted-chat/shared";
+import type { GroupInviteView, GroupJoinRequestView, GroupMemberRole, GroupView } from "@encrypted-chat/shared";
 import { SocketEvents } from "@encrypted-chat/shared";
 import { Prisma } from "@prisma/client";
 import { presentUser } from "../../common/user-presenter";
@@ -170,15 +170,21 @@ export class GroupsService {
       include: groupJoinRequestInclude
     });
     const view = presentGroupJoinRequest(request);
-    this.realtime.emitToUser(group.ownerId, SocketEvents.GroupUpdated, {
-      groupId: group.id,
-      action: "join-request"
+    const managers = await this.prisma.groupMember.findMany({
+      where: { groupId: group.id, role: { in: ["owner", "admin"] } },
+      select: { userId: true }
     });
+    for (const managerId of new Set([group.ownerId, ...managers.map((member) => member.userId)])) {
+      this.realtime.emitToUser(managerId, SocketEvents.GroupUpdated, {
+        groupId: group.id,
+        action: "join-request"
+      });
+    }
     return view;
   }
 
-  async listJoinRequests(ownerId: string, groupId: string): Promise<GroupJoinRequestView[]> {
-    await this.assertOwner(ownerId, groupId);
+  async listJoinRequests(actorId: string, groupId: string): Promise<GroupJoinRequestView[]> {
+    await this.assertAtLeastAdmin(actorId, groupId);
     const requests = await this.prisma.groupJoinRequest.findMany({
       where: { groupId, status: "pending" },
       include: groupJoinRequestInclude,
@@ -188,15 +194,16 @@ export class GroupsService {
   }
 
   async approveJoinRequest(
-    ownerId: string,
+    actorId: string,
     requestId: string,
     encryptedGroupKey: string,
     keyVersion: number
   ): Promise<GroupJoinRequestView> {
     const request = await this.getJoinRequestRecord(requestId);
-    if (!request || request.group.ownerId !== ownerId || request.status !== "pending") {
+    if (!request || request.status !== "pending") {
       throw new NotFoundException("Pending join request not found");
     }
+    await this.assertAtLeastAdmin(actorId, request.groupId);
 
     const existingMember = await this.prisma.groupMember.findUnique({
       where: { groupId_userId: { groupId: request.groupId, userId: request.applicantId } },
@@ -236,11 +243,12 @@ export class GroupsService {
     return presentGroupJoinRequest(updated);
   }
 
-  async rejectJoinRequest(ownerId: string, requestId: string): Promise<GroupJoinRequestView> {
+  async rejectJoinRequest(actorId: string, requestId: string): Promise<GroupJoinRequestView> {
     const request = await this.getJoinRequestRecord(requestId);
-    if (!request || request.group.ownerId !== ownerId || request.status !== "pending") {
+    if (!request || request.status !== "pending") {
       throw new NotFoundException("Pending join request not found");
     }
+    await this.assertAtLeastAdmin(actorId, request.groupId);
 
     const updated = await this.prisma.groupJoinRequest.update({
       where: { id: requestId },
@@ -319,6 +327,76 @@ export class GroupsService {
     return presentGroupInvite(updated);
   }
 
+  async updateMemberRole(
+    ownerId: string,
+    groupId: string,
+    memberId: string,
+    role: Exclude<GroupMemberRole, "owner">
+  ): Promise<GroupView> {
+    await this.assertOwner(ownerId, groupId);
+    const target = await this.getMembership(memberId, groupId);
+    if (!target) {
+      throw new NotFoundException("Group member not found");
+    }
+    if (target.role === "owner") {
+      throw new BadRequestException("The group owner role cannot be changed");
+    }
+
+    await this.prisma.groupMember.update({
+      where: { groupId_userId: { groupId, userId: memberId } },
+      data: { role }
+    });
+    const group = await this.prisma.group.update({
+      where: { id: groupId },
+      data: {},
+      include: groupInclude
+    });
+    this.realtime.emitToGroup(groupId, SocketEvents.GroupUpdated, {
+      groupId,
+      memberId,
+      action: "member-role-updated"
+    });
+    return presentGroup(group);
+  }
+
+  async removeMember(actorId: string, groupId: string, memberId: string): Promise<void> {
+    const [actor, target] = await Promise.all([this.getMembership(actorId, groupId), this.getMembership(memberId, groupId)]);
+    if (!actor) {
+      throw new BadRequestException("You are not a member of this group");
+    }
+    if (!target) {
+      throw new NotFoundException("Group member not found");
+    }
+    if (target.role === "owner") {
+      throw new BadRequestException("The group owner cannot be removed");
+    }
+    if (actor.role === "member" || (actor.role === "admin" && target.role !== "member")) {
+      throw new BadRequestException("You do not have permission to remove this member");
+    }
+
+    await this.prisma.groupMember.delete({
+      where: { groupId_userId: { groupId, userId: memberId } }
+    });
+    this.realtime.emitToGroup(groupId, SocketEvents.GroupUpdated, {
+      groupId,
+      memberId,
+      action: "member-removed"
+    });
+    this.realtime.emitToUser(memberId, SocketEvents.GroupUpdated, {
+      groupId,
+      action: "removed"
+    });
+  }
+
+  async deleteGroup(ownerId: string, groupId: string): Promise<void> {
+    await this.assertOwner(ownerId, groupId);
+    this.realtime.emitToGroup(groupId, SocketEvents.GroupUpdated, {
+      groupId,
+      action: "deleted"
+    });
+    await this.prisma.group.delete({ where: { id: groupId } });
+  }
+
   async isMember(userId: string, groupId: string): Promise<boolean> {
     const member = await this.prisma.groupMember.findUnique({
       where: { groupId_userId: { groupId, userId } },
@@ -342,6 +420,20 @@ export class GroupsService {
     if (!group || group.ownerId !== userId) {
       throw new BadRequestException("Only the group owner can do this");
     }
+  }
+
+  private async assertAtLeastAdmin(userId: string, groupId: string) {
+    const member = await this.getMembership(userId, groupId);
+    if (!member || (member.role !== "owner" && member.role !== "admin")) {
+      throw new BadRequestException("Only the group owner or an admin can do this");
+    }
+  }
+
+  private getMembership(userId: string, groupId: string) {
+    return this.prisma.groupMember.findUnique({
+      where: { groupId_userId: { groupId, userId } },
+      select: { role: true }
+    });
   }
 
   private getGroupRecord(groupId: string) {

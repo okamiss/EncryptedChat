@@ -8,6 +8,7 @@ export const SocketEvents = {
   PresenceUpdate: "presence:update",
   FriendRequest: "friend:request",
   FriendAccepted: "friend:accepted",
+  FriendUpdated: "friend:updated",
   GroupInvite: "group:invite",
   GroupUpdated: "group:updated"
 } as const;

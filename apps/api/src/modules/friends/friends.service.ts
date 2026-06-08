@@ -157,6 +157,27 @@ export class FriendsService {
     });
     return Boolean(friendship);
   }
+
+  async remove(userId: string, friendId: string): Promise<void> {
+    const [userAId, userBId] = sortFriendPair(userId, friendId);
+    const friendship = await this.prisma.friendship.findUnique({
+      where: { userAId_userBId: { userAId, userBId } },
+      select: { id: true }
+    });
+    if (!friendship) {
+      throw new NotFoundException("Friendship not found");
+    }
+
+    await this.prisma.friendship.delete({ where: { id: friendship.id } });
+    this.realtime.emitToUser(friendId, SocketEvents.FriendUpdated, {
+      userId,
+      action: "removed"
+    });
+    this.realtime.emitToUser(userId, SocketEvents.FriendUpdated, {
+      userId: friendId,
+      action: "removed"
+    });
+  }
 }
 
 const friendRequestInclude = {

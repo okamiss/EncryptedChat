@@ -1,15 +1,24 @@
-import { CheckOutlined, EditOutlined, StopOutlined, TeamOutlined, UserAddOutlined } from "@ant-design/icons";
+import {
+  CheckOutlined,
+  CrownOutlined,
+  DeleteOutlined,
+  EditOutlined,
+  StopOutlined,
+  TeamOutlined,
+  UserAddOutlined
+} from "@ant-design/icons";
 import type {
   EncryptedMessageEnvelope,
   FriendView,
   GroupJoinRequestView,
+  GroupMemberRole,
   GroupView,
   MessageRecallPayload
 } from "@encrypted-chat/shared";
 import { SocketEvents } from "@encrypted-chat/shared";
 import { App, Button, Empty, Input, List, Modal, Select, Space, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { ChatComposer, type ComposerInsertRequest } from "../components/ChatComposer";
 import { MessageBubble, type RenderedMessage } from "../components/MessageBubble";
 import { decryptImageBlob, encryptImageFile } from "../crypto/files";
@@ -29,8 +38,9 @@ import { mentionedUserIdsInText } from "../utils/mentions";
 
 export function GroupChatPage() {
   const { groupId = "" } = useParams();
+  const navigate = useNavigate();
   const { apiClient, user, privateKey, socket, markConversationRead } = useAuth();
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const [group, setGroup] = useState<GroupView | undefined>();
   const [friends, setFriends] = useState<FriendView[]>([]);
   const [inviteeId, setInviteeId] = useState<string>();
@@ -49,6 +59,7 @@ export function GroupChatPage() {
   const myMembership = group?.members.find((member) => member.user.id === user?.id);
   const keyVersion = myMembership?.keyVersion ?? 1;
   const isOwner = group?.ownerId === user?.id;
+  const canManageJoinRequests = myMembership?.role === "owner" || myMembership?.role === "admin";
   const friendIds = useMemo(() => new Set(friends.map((friend) => friend.id)), [friends]);
 
   const load = useCallback(async () => {
@@ -67,14 +78,14 @@ export function GroupChatPage() {
   }, [load, message]);
 
   useEffect(() => {
-    if (isOwner) {
+    if (canManageJoinRequests) {
       void loadJoinRequests().catch((error) =>
         message.error(error instanceof Error ? error.message : "加载入群申请失败")
       );
     } else {
       setJoinRequests([]);
     }
-  }, [isOwner, loadJoinRequests, message]);
+  }, [canManageJoinRequests, loadJoinRequests, message]);
 
   useEffect(() => {
     setEnvelopes(getLocalMessages(conversationKey));
@@ -116,9 +127,13 @@ export function GroupChatPage() {
       removeLocalMessage(conversationKey, payload.clientMessageId);
       setEnvelopes((current) => current.filter((item) => item.clientMessageId !== payload.clientMessageId));
     };
-    const handleGroupUpdated = () => {
+    const handleGroupUpdated = (payload?: { groupId?: string; action?: string }) => {
+      if (payload?.groupId === groupId && (payload.action === "deleted" || payload.action === "removed")) {
+        navigate("/groups");
+        return;
+      }
       void load();
-      if (isOwner) {
+      if (canManageJoinRequests) {
         void loadJoinRequests();
       }
     };
@@ -131,7 +146,7 @@ export function GroupChatPage() {
       socket.off(SocketEvents.MessageRecalled, handleMessageRecalled);
       socket.off(SocketEvents.GroupUpdated, handleGroupUpdated);
     };
-  }, [conversationKey, groupId, isOwner, load, loadJoinRequests, markConversationRead, socket, user]);
+  }, [canManageJoinRequests, conversationKey, groupId, load, loadJoinRequests, markConversationRead, navigate, socket, user]);
 
   useEffect(() => {
     let cancelled = false;
@@ -287,20 +302,45 @@ export function GroupChatPage() {
           </div>
           <Space>
             {isOwner && (
-              <Button
-                icon={<EditOutlined />}
-                onClick={() => {
-                  setGroupNameDraft(group?.name ?? "");
-                  setRenaming(true);
-                }}
-              >
-                改名
-              </Button>
+              <>
+                <Button
+                  icon={<EditOutlined />}
+                  onClick={() => {
+                    setGroupNameDraft(group?.name ?? "");
+                    setRenaming(true);
+                  }}
+                >
+                  改名
+                </Button>
+                <Button
+                  danger
+                  icon={<DeleteOutlined />}
+                  onClick={() => {
+                    if (!group) {
+                      return;
+                    }
+                    modal.confirm({
+                      title: "解散群聊",
+                      content: `确认解散 ${group.name}？解散后所有成员都会失去该群聊。`,
+                      okText: "解散",
+                      okButtonProps: { danger: true },
+                      cancelText: "取消",
+                      onOk: async () => {
+                        await api.deleteGroup(apiClient, group.id);
+                        message.success("群聊已解散");
+                        navigate("/groups");
+                      }
+                    });
+                  }}
+                >
+                  解散
+                </Button>
+              </>
             )}
             <Button icon={<TeamOutlined />} onClick={() => setMembersOpen(true)}>
               成员
             </Button>
-            {isOwner && (
+            {canManageJoinRequests && (
               <Button icon={<UserAddOutlined />} onClick={() => setJoinRequestsOpen(true)}>
                 申请 {joinRequests.length}
               </Button>
@@ -394,30 +434,75 @@ export function GroupChatPage() {
           locale={{ emptyText: <Empty description="暂无成员" /> }}
           renderItem={(member) => {
             const canAddFriend = member.user.id !== user?.id && !friendIds.has(member.user.id);
+            const isSelf = member.user.id === user?.id;
+            const canChangeRole = isOwner && !isSelf && member.role !== "owner";
+            const canRemove =
+              !isSelf &&
+              member.role !== "owner" &&
+              (isOwner || (myMembership?.role === "admin" && member.role === "member"));
+            const actions = [];
+            if (canChangeRole) {
+              actions.push(
+                <Button
+                  key="role"
+                  icon={<CrownOutlined />}
+                  onClick={async () => {
+                    const nextRole = member.role === "admin" ? "member" : "admin";
+                    const nextGroup = await api.updateGroupMemberRole(apiClient, groupId, member.user.id, {
+                      role: nextRole
+                    });
+                    setGroup(nextGroup);
+                    message.success(nextRole === "admin" ? "已设为管理员" : "已取消管理员");
+                  }}
+                >
+                  {member.role === "admin" ? "取消管理员" : "设为管理员"}
+                </Button>
+              );
+            }
+            if (canRemove) {
+              actions.push(
+                <Button
+                  key="remove"
+                  danger
+                  icon={<DeleteOutlined />}
+                  onClick={() => {
+                    modal.confirm({
+                      title: "移除成员",
+                      content: `确认将 ${displayUserName(member.user)} 移出群聊？`,
+                      okText: "移除",
+                      okButtonProps: { danger: true },
+                      cancelText: "取消",
+                      onOk: async () => {
+                        await api.removeGroupMember(apiClient, groupId, member.user.id);
+                        message.success("成员已移除");
+                        await load();
+                      }
+                    });
+                  }}
+                >
+                  移除
+                </Button>
+              );
+            }
+            if (canAddFriend) {
+              actions.push(
+                <Button
+                  key="add"
+                  icon={<UserAddOutlined />}
+                  onClick={async () => {
+                    await api.createFriendRequest(apiClient, { addresseeUid: member.user.uid });
+                    message.success("好友申请已发送");
+                  }}
+                >
+                  加好友
+                </Button>
+              );
+            }
             return (
-              <List.Item
-                actions={
-                  canAddFriend
-                    ? [
-                        <Button
-                          key="add"
-                          icon={<UserAddOutlined />}
-                          onClick={async () => {
-                            await api.createFriendRequest(apiClient, { addresseeUid: member.user.uid });
-                            message.success("好友申请已发送");
-                          }}
-                        >
-                          加好友
-                        </Button>
-                      ]
-                    : []
-                }
-              >
+              <List.Item actions={actions}>
                 <List.Item.Meta
                   title={displayUserName(member.user)}
-                  description={`${member.role === "owner" ? "群主" : "成员"} · ${member.user.username} · UID ${
-                    member.user.uid
-                  }`}
+                  description={`${roleLabel(member.role)} · ${member.user.username} · UID ${member.user.uid}`}
                 />
               </List.Item>
             );
@@ -533,4 +618,14 @@ function failedView(envelope: EncryptedMessageEnvelope, own: boolean, senderName
 
 function quoteTextForMessage(message: RenderedMessage): string | undefined {
   return message.text ?? (message.imageName ? `[图片] ${message.imageName}` : undefined);
+}
+
+function roleLabel(role: GroupMemberRole): string {
+  if (role === "owner") {
+    return "群主";
+  }
+  if (role === "admin") {
+    return "管理员";
+  }
+  return "成员";
 }

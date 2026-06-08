@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, UseGuards } from "@nestjs/common";
 import { CurrentUser } from "../../common/current-user.decorator";
 import type { AuthenticatedUser } from "../../common/authenticated-user";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
@@ -38,5 +38,11 @@ export class FriendsController {
   @Get("friends")
   friends(@CurrentUser() user: AuthenticatedUser) {
     return this.friendsService.listFriends(user.id);
+  }
+
+  @Delete("friends/:id")
+  @HttpCode(204)
+  remove(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
+    return this.friendsService.remove(user.id, id);
   }
 }

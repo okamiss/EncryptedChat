@@ -1,7 +1,7 @@
 export type PublicJwk = JsonWebKey;
 
 export type FriendRequestStatus = "pending" | "accepted" | "rejected";
-export type GroupMemberRole = "owner" | "member";
+export type GroupMemberRole = "owner" | "admin" | "member";
 export type ConversationType = "direct" | "group";
 export type MessageType = "text" | "image";
 export type FileScopeType = "direct" | "group";
@@ -110,6 +110,10 @@ export interface ApproveGroupJoinRequestRequest {
 
 export interface UpdateGroupRequest {
   groupName: string;
+}
+
+export interface UpdateGroupMemberRoleRequest {
+  role: Exclude<GroupMemberRole, "owner">;
 }
 
 export interface UploadEncryptedFileResponse {

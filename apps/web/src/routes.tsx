@@ -5,9 +5,10 @@ import {
   TeamOutlined,
   UserOutlined
 } from "@ant-design/icons";
+import { SocketEvents } from "@encrypted-chat/shared";
 import type { FriendView, GroupView } from "@encrypted-chat/shared";
 import { Alert, Badge, Button, Layout, Menu, Space, Typography } from "antd";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import * as api from "./services/api";
 import { useAuth } from "./state/AuthContext";
@@ -54,7 +55,7 @@ function ProtectedRoute() {
 }
 
 function AppLayout() {
-  const { apiClient, user, privateKeyStatus, logout, unreadConversationKeys } = useAuth();
+  const { apiClient, user, privateKeyStatus, logout, socket, unreadConversationKeys } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [quickFriends, setQuickFriends] = useState<FriendView[]>([]);
@@ -62,26 +63,35 @@ function AppLayout() {
   const hasDirectUnread = unreadConversationKeys.some((key) => key.startsWith("direct:"));
   const hasGroupUnread = unreadConversationKeys.some((key) => key.startsWith("group:"));
 
-  useEffect(() => {
-    let cancelled = false;
-    void Promise.all([api.listFriends(apiClient), api.listGroups(apiClient)])
-      .then(([friends, groups]) => {
-        if (cancelled) {
-          return;
-        }
-        setQuickFriends(friends.slice(0, 3));
-        setQuickGroups(groups.slice(0, 3));
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setQuickFriends([]);
-          setQuickGroups([]);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
+  const loadQuickEntries = useCallback(async () => {
+    try {
+      const [friends, groups] = await Promise.all([api.listFriends(apiClient), api.listGroups(apiClient)]);
+      setQuickFriends(friends.slice(0, 3));
+      setQuickGroups(groups.slice(0, 3));
+    } catch {
+      setQuickFriends([]);
+      setQuickGroups([]);
+    }
   }, [apiClient]);
+
+  useEffect(() => {
+    void loadQuickEntries();
+  }, [loadQuickEntries]);
+
+  useEffect(() => {
+    if (!socket) {
+      return;
+    }
+    const reload = () => {
+      void loadQuickEntries();
+    };
+    socket.on(SocketEvents.FriendUpdated, reload);
+    socket.on(SocketEvents.GroupUpdated, reload);
+    return () => {
+      socket.off(SocketEvents.FriendUpdated, reload);
+      socket.off(SocketEvents.GroupUpdated, reload);
+    };
+  }, [loadQuickEntries, socket]);
 
   return (
     <Layout className="app-layout">

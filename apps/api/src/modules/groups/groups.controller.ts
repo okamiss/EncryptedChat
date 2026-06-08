@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { CurrentUser } from "../../common/current-user.decorator";
 import type { AuthenticatedUser } from "../../common/authenticated-user";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
@@ -7,6 +7,7 @@ import {
   CreateGroupDto,
   CreateGroupInviteDto,
   CreateGroupJoinRequestDto,
+  UpdateGroupMemberRoleDto,
   UpdateGroupDto
 } from "./dto/groups.dto";
 import { GroupsService } from "./groups.service";
@@ -34,6 +35,32 @@ export class GroupsController {
   @Patch("groups/:id")
   update(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string, @Body() body: UpdateGroupDto) {
     return this.groupsService.updateName(user.id, id, body.groupName);
+  }
+
+  @Delete("groups/:id")
+  @HttpCode(204)
+  deleteGroup(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
+    return this.groupsService.deleteGroup(user.id, id);
+  }
+
+  @Patch("groups/:id/members/:userId/role")
+  updateMemberRole(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id") groupId: string,
+    @Param("userId") userId: string,
+    @Body() body: UpdateGroupMemberRoleDto
+  ) {
+    return this.groupsService.updateMemberRole(user.id, groupId, userId, body.role);
+  }
+
+  @Delete("groups/:id/members/:userId")
+  @HttpCode(204)
+  removeMember(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id") groupId: string,
+    @Param("userId") userId: string
+  ) {
+    return this.groupsService.removeMember(user.id, groupId, userId);
   }
 
   @Post("groups/:id/invites")
