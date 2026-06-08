@@ -361,6 +361,7 @@ export class GroupsService {
 
   async removeMember(actorId: string, groupId: string, memberId: string): Promise<void> {
     const [actor, target] = await Promise.all([this.getMembership(actorId, groupId), this.getMembership(memberId, groupId)]);
+    const isSelfRemoval = actorId === memberId;
     if (!actor) {
       throw new BadRequestException("You are not a member of this group");
     }
@@ -370,21 +371,22 @@ export class GroupsService {
     if (target.role === "owner") {
       throw new BadRequestException("The group owner cannot be removed");
     }
-    if (actor.role === "member" || (actor.role === "admin" && target.role !== "member")) {
+    if (!isSelfRemoval && (actor.role === "member" || (actor.role === "admin" && target.role !== "member"))) {
       throw new BadRequestException("You do not have permission to remove this member");
     }
 
     await this.prisma.groupMember.delete({
       where: { groupId_userId: { groupId, userId: memberId } }
     });
+    const action = isSelfRemoval ? "member-left" : "member-removed";
     this.realtime.emitToGroup(groupId, SocketEvents.GroupUpdated, {
       groupId,
       memberId,
-      action: "member-removed"
+      action
     });
     this.realtime.emitToUser(memberId, SocketEvents.GroupUpdated, {
       groupId,
-      action: "removed"
+      action: isSelfRemoval ? "left" : "removed"
     });
   }
 

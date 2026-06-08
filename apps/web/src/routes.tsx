@@ -1,17 +1,9 @@
-import {
-  ContactsOutlined,
-  MessageOutlined,
-  PlusOutlined,
-  TeamOutlined,
-  UserOutlined
-} from "@ant-design/icons";
+import { LockOutlined } from "@ant-design/icons";
 import { SocketEvents } from "@encrypted-chat/shared";
 import type { FriendView, GroupView } from "@encrypted-chat/shared";
-import { Alert, Badge, Button, Layout, Menu, Space, Typography } from "antd";
+import { Alert } from "antd";
 import { useCallback, useEffect, useState } from "react";
-import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import * as api from "./services/api";
-import { useAuth } from "./state/AuthContext";
+import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { AddFriendPage } from "./pages/AddFriendPage";
 import { ChatPage } from "./pages/ChatPage";
 import { CreateGroupPage } from "./pages/CreateGroupPage";
@@ -21,8 +13,10 @@ import { GroupsPage } from "./pages/GroupsPage";
 import { LoginPage } from "./pages/LoginPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { RegisterPage } from "./pages/RegisterPage";
-import { ThemeModeButton } from "./components/ThemeModeButton";
-import { displayUserName } from "./utils/displayName";
+import * as api from "./services/api";
+import { useAuth } from "./state/AuthContext";
+import { ConversationList } from "./components/ConversationList";
+import { SidebarNav } from "./components/SidebarNav";
 
 export function AppRoutes() {
   return (
@@ -56,34 +50,42 @@ function ProtectedRoute() {
 
 function AppLayout() {
   const { apiClient, user, privateKeyStatus, logout, socket, unreadConversationKeys } = useAuth();
-  const navigate = useNavigate();
   const location = useLocation();
-  const [quickFriends, setQuickFriends] = useState<FriendView[]>([]);
-  const [quickGroups, setQuickGroups] = useState<GroupView[]>([]);
+  const [friends, setFriends] = useState<FriendView[]>([]);
+  const [groups, setGroups] = useState<GroupView[]>([]);
   const hasDirectUnread = unreadConversationKeys.some((key) => key.startsWith("direct:"));
   const hasGroupUnread = unreadConversationKeys.some((key) => key.startsWith("group:"));
+  const isChatRoute = location.pathname.startsWith("/chats/") || location.pathname.startsWith("/groups/");
+  const isListRoute = location.pathname === "/friends" || location.pathname === "/groups";
+  const shellClassName = [
+    "app-shell",
+    isChatRoute ? "chat-route-active" : "",
+    !isChatRoute && !isListRoute ? "utility-route-active" : ""
+  ]
+    .filter(Boolean)
+    .join(" ");
 
-  const loadQuickEntries = useCallback(async () => {
+  const loadConversations = useCallback(async () => {
     try {
-      const [friends, groups] = await Promise.all([api.listFriends(apiClient), api.listGroups(apiClient)]);
-      setQuickFriends(friends.slice(0, 3));
-      setQuickGroups(groups.slice(0, 3));
+      const [nextFriends, nextGroups] = await Promise.all([api.listFriends(apiClient), api.listGroups(apiClient)]);
+      setFriends(nextFriends);
+      setGroups(nextGroups);
     } catch {
-      setQuickFriends([]);
-      setQuickGroups([]);
+      setFriends([]);
+      setGroups([]);
     }
   }, [apiClient]);
 
   useEffect(() => {
-    void loadQuickEntries();
-  }, [loadQuickEntries]);
+    void loadConversations();
+  }, [loadConversations]);
 
   useEffect(() => {
     if (!socket) {
       return;
     }
     const reload = () => {
-      void loadQuickEntries();
+      void loadConversations();
     };
     socket.on(SocketEvents.FriendUpdated, reload);
     socket.on(SocketEvents.GroupUpdated, reload);
@@ -91,100 +93,29 @@ function AppLayout() {
       socket.off(SocketEvents.FriendUpdated, reload);
       socket.off(SocketEvents.GroupUpdated, reload);
     };
-  }, [loadQuickEntries, socket]);
+  }, [loadConversations, socket]);
 
   return (
-    <Layout className="app-layout">
-      <Layout.Sider breakpoint="lg" collapsedWidth="0" width={236} className="app-sider">
-        <div className="brand">EncryptedChat</div>
-        {(quickFriends.length > 0 || quickGroups.length > 0) && (
-          <div className="side-quick">
-            <Typography.Text className="side-quick-title">快捷入口</Typography.Text>
-            <div className="side-quick-list">
-              {quickFriends.map((friend) => {
-                const key = `direct:${friend.id}`;
-                const active = location.pathname === `/chats/${friend.id}`;
-                return (
-                  <button
-                    key={friend.id}
-                    type="button"
-                    className={`side-quick-item${active ? " active" : ""}`}
-                    onClick={() => navigate(`/chats/${friend.id}`)}
-                  >
-                    <MessageOutlined />
-                    <span>{displayUserName(friend)}</span>
-                    <Badge dot={unreadConversationKeys.includes(key)} />
-                  </button>
-                );
-              })}
-              {quickGroups.map((group) => {
-                const key = `group:${group.id}`;
-                const active = location.pathname === `/groups/${group.id}`;
-                return (
-                  <button
-                    key={group.id}
-                    type="button"
-                    className={`side-quick-item${active ? " active" : ""}`}
-                    onClick={() => navigate(`/groups/${group.id}`)}
-                  >
-                    <TeamOutlined />
-                    <span>{group.name}</span>
-                    <Badge dot={unreadConversationKeys.includes(key)} />
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+    <div className={shellClassName}>
+      <SidebarNav
+        user={user}
+        hasDirectUnread={hasDirectUnread}
+        hasGroupUnread={hasGroupUnread}
+        onLogout={logout}
+      />
+      <ConversationList friends={friends} groups={groups} unreadConversationKeys={unreadConversationKeys} />
+      <main className="app-content">
+        {privateKeyStatus !== "ready" && (
+          <Alert
+            className="key-status-alert"
+            type="warning"
+            showIcon
+            icon={<LockOutlined />}
+            message={privateKeyStatus === "missing" ? "当前浏览器没有私钥，无法解密消息。" : "私钥尚未解锁。"}
+          />
         )}
-        <Menu
-          theme="dark"
-          mode="inline"
-          selectedKeys={[selectedKey(location.pathname)]}
-          onClick={({ key }) => navigate(String(key))}
-          items={[
-            { key: "/friends", icon: <ContactsOutlined />, label: <Badge dot={hasDirectUnread}>好友</Badge> },
-            { key: "/add-friend", icon: <PlusOutlined />, label: "添加好友" },
-            { key: "/groups", icon: <TeamOutlined />, label: <Badge dot={hasGroupUnread}>群聊</Badge> },
-            { key: "/profile", icon: <UserOutlined />, label: "个人信息" }
-          ]}
-        />
-      </Layout.Sider>
-      <Layout>
-        <Layout.Header className="app-header">
-          <Space style={{ width: "100%", justifyContent: "space-between" }}>
-            <Space>
-              <MessageOutlined />
-              <Typography.Text strong>{user?.username}</Typography.Text>
-              <Typography.Text type="secondary">UID {user?.uid}</Typography.Text>
-            </Space>
-            <Space>
-              <ThemeModeButton />
-              <Button onClick={logout}>退出</Button>
-            </Space>
-          </Space>
-        </Layout.Header>
-        <Layout.Content className="app-content">
-          {privateKeyStatus !== "ready" && (
-            <Alert
-              type="warning"
-              showIcon
-              style={{ marginBottom: 12 }}
-              message={privateKeyStatus === "missing" ? "当前浏览器没有私钥，无法解密消息。" : "私钥尚未解锁。"}
-            />
-          )}
-          <Outlet />
-        </Layout.Content>
-      </Layout>
-    </Layout>
+        <Outlet />
+      </main>
+    </div>
   );
-}
-
-function selectedKey(pathname: string) {
-  if (pathname.startsWith("/groups")) {
-    return "/groups";
-  }
-  if (pathname.startsWith("/chats")) {
-    return "/friends";
-  }
-  return pathname;
 }

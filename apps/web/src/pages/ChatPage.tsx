@@ -1,10 +1,13 @@
 import type { EncryptedMessageEnvelope, FriendView, MessageRecallPayload } from "@encrypted-chat/shared";
 import { SocketEvents } from "@encrypted-chat/shared";
-import { App, Empty, Space, Typography } from "antd";
+import { App } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
+import { ChatHeader } from "../components/ChatHeader";
 import { ChatComposer, type ComposerInsertRequest, type ComposerMessagePart } from "../components/ChatComposer";
-import { MessageBubble, type RenderedMessage } from "../components/MessageBubble";
+import { MessageList } from "../components/MessageList";
+import type { RenderedMessage } from "../components/MessageBubble";
+import { UserProfilePanel } from "../components/UserProfilePanel";
 import { decryptImageBlob, encryptImageFile } from "../crypto/files";
 import { decryptDirectMessage, encryptDirectMessage, type PlainMessage } from "../crypto/messages";
 import { useAutoScrollToBottom } from "../hooks/useAutoScrollToBottom";
@@ -186,42 +189,52 @@ export function ChatPage() {
     [conversationKey, friend, socket]
   );
 
+  const friendName = friend ? displayUserName(friend) : "单聊";
+  const profilePanel = (
+    <UserProfilePanel
+      title={friendName}
+      subtitle={friend ? `UID ${friend.uid}` : "好友不存在或尚未加载"}
+      meta={[
+        { label: "用户名", value: friend?.username ?? "-" },
+        { label: "UID", value: friend?.uid ?? "-" },
+        { label: "会话类型", value: "单聊" },
+        { label: "连接状态", value: socket ? "实时连接" : "未连接" },
+        { label: "解密状态", value: privateKey ? "私钥已就绪" : "等待私钥" }
+      ]}
+    />
+  );
+
   return (
-    <section className="surface chat-shell">
-      <div className="chat-header">
-        <Typography.Title level={3} style={{ margin: 0 }}>
-          {friend ? displayUserName(friend) : "单聊"}
-        </Typography.Title>
-        <Typography.Text type="secondary">{friend ? `UID ${friend.uid}` : "好友不存在或尚未加载"}</Typography.Text>
+    <section className="chat-workspace">
+      <div className="surface chat-main chat-shell">
+        <ChatHeader
+          title={friendName}
+          subtitle={friend ? `UID ${friend.uid}` : "好友不存在或尚未加载"}
+          avatarText={friendName}
+          backTo="/friends"
+          profileTitle="好友资料"
+          profilePanel={profilePanel}
+        />
+        <MessageList
+          ref={messageListRef}
+          messages={rendered}
+          onMentionSender={mentionSender}
+          onQuoteMessage={quoteMessage}
+          onRecallMessage={recallMessage}
+        />
+        <ChatComposer
+          disabled={!friend || !socket}
+          insertRequest={composerInsert}
+          onSendMessage={async (parts) => {
+            try {
+              await sendMessage(parts);
+            } catch (error) {
+              message.error(error instanceof Error ? error.message : "发送失败");
+            }
+          }}
+        />
       </div>
-      <div className="message-list" ref={messageListRef}>
-        {rendered.length === 0 ? (
-          <Empty description="暂无消息" />
-        ) : (
-          <Space direction="vertical" size={0} style={{ width: "100%" }}>
-            {rendered.map((item) => (
-              <MessageBubble
-                key={item.clientMessageId}
-                message={item}
-                onMentionSender={mentionSender}
-                onQuoteMessage={quoteMessage}
-                onRecallMessage={recallMessage}
-              />
-            ))}
-          </Space>
-        )}
-      </div>
-      <ChatComposer
-        disabled={!friend || !socket}
-        insertRequest={composerInsert}
-        onSendMessage={async (parts) => {
-          try {
-            await sendMessage(parts);
-          } catch (error) {
-            message.error(error instanceof Error ? error.message : "发送失败");
-          }
-        }}
-      />
+      {profilePanel}
     </section>
   );
 }

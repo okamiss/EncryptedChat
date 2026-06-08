@@ -1,5 +1,6 @@
 import { CommentOutlined, FileImageOutlined, LockOutlined, RollbackOutlined, UserOutlined } from "@ant-design/icons";
-import { Button, Image, Space, Tooltip, Typography } from "antd";
+import { Button, Image, Popconfirm, Space, Tooltip, Typography } from "antd";
+import { formatMessageTime } from "../utils/messageTime";
 
 export interface RenderedMessage {
   clientMessageId: string;
@@ -15,12 +16,13 @@ export interface RenderedMessage {
 
 interface MessageBubbleProps {
   message: RenderedMessage;
+  compact?: boolean;
   onMentionSender?: (message: RenderedMessage) => void;
   onQuoteMessage?: (message: RenderedMessage) => void;
   onRecallMessage?: (message: RenderedMessage) => void;
 }
 
-export function MessageBubble({ message, onMentionSender, onQuoteMessage, onRecallMessage }: MessageBubbleProps) {
+export function MessageBubble({ message, compact, onMentionSender, onQuoteMessage, onRecallMessage }: MessageBubbleProps) {
   const canUseActions = !message.own;
   const canQuote = message.status === "decrypted" && Boolean(message.text || message.imageName || message.richParts);
   const peerActions =
@@ -54,26 +56,36 @@ export function MessageBubble({ message, onMentionSender, onQuoteMessage, onReca
   const ownActions =
     message.own && onRecallMessage ? (
       <div className="message-actions own-message-actions">
-        <Tooltip title="撤回当前消息">
-          <Button
-            aria-label="撤回当前消息"
-            size="small"
-            type="text"
-            icon={<RollbackOutlined />}
-            onClick={() => onRecallMessage(message)}
-          />
-        </Tooltip>
+        <Popconfirm
+          title="撤回消息"
+          description="确认撤回这条消息？"
+          okText="撤回"
+          okButtonProps={{ danger: true }}
+          cancelText="取消"
+          onConfirm={() => onRecallMessage(message)}
+        >
+          <Tooltip title="撤回当前消息">
+            <Button aria-label="撤回当前消息" size="small" type="text" icon={<RollbackOutlined />} />
+          </Tooltip>
+        </Popconfirm>
       </div>
     ) : null;
 
   return (
-    <div className={`message-row ${message.own ? "own" : ""}`}>
+    <div className={`message-row ${message.own ? "own" : ""}${compact ? " compact" : ""}`}>
       {ownActions}
-      <div className="message-bubble">
-        <div className="message-meta">
-          {message.senderName}
-          {message.sentAt ? ` · ${new Date(message.sentAt).toLocaleString()}` : ""}
+      {!message.own && (
+        <div className="message-avatar" aria-hidden="true">
+          {compact ? "" : message.senderName.slice(0, 1).toUpperCase()}
         </div>
+      )}
+      <div className="message-bubble">
+        {!compact && (
+          <div className="message-meta">
+            {message.senderName}
+            {message.sentAt ? ` · ${formatMessageTime(message.sentAt)}` : ""}
+          </div>
+        )}
         {message.status === "decrypted" && !message.richParts && message.text && <Typography.Text>{message.text}</Typography.Text>}
         {message.status === "decrypted" && message.imageUrl && (
           <Space direction="vertical" size={6}>

@@ -3,6 +3,7 @@ import {
   CrownOutlined,
   DeleteOutlined,
   EditOutlined,
+  LogoutOutlined,
   StopOutlined,
   TeamOutlined,
   UserAddOutlined
@@ -16,11 +17,14 @@ import type {
   MessageRecallPayload
 } from "@encrypted-chat/shared";
 import { SocketEvents } from "@encrypted-chat/shared";
-import { App, Button, Empty, Input, List, Modal, Select, Space, Typography } from "antd";
+import { App, Button, Empty, Input, List, Modal, Select, Space } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { ChatHeader } from "../components/ChatHeader";
 import { ChatComposer, type ComposerInsertRequest, type ComposerMessagePart } from "../components/ChatComposer";
-import { MessageBubble, type RenderedMessage } from "../components/MessageBubble";
+import { MessageList } from "../components/MessageList";
+import type { RenderedMessage } from "../components/MessageBubble";
+import { UserProfilePanel } from "../components/UserProfilePanel";
 import { decryptImageBlob, encryptImageFile } from "../crypto/files";
 import {
   decryptGroupMessage,
@@ -129,7 +133,7 @@ export function GroupChatPage() {
       setEnvelopes((current) => current.filter((item) => item.clientMessageId !== payload.clientMessageId));
     };
     const handleGroupUpdated = (payload?: { groupId?: string; action?: string }) => {
-      if (payload?.groupId === groupId && (payload.action === "deleted" || payload.action === "removed")) {
+      if (payload?.groupId === groupId && (payload.action === "deleted" || payload.action === "removed" || payload.action === "left")) {
         navigate("/groups");
         return;
       }
@@ -263,121 +267,151 @@ export function GroupChatPage() {
     .filter((friend) => !group?.members.some((member) => member.user.id === friend.id))
     .map((friend) => ({ label: `${displayUserName(friend)} · ${friend.uid}`, value: friend.id }));
 
-  return (
-    <section className="surface chat-shell">
-      <div className="chat-header">
-        <Space style={{ justifyContent: "space-between", width: "100%" }} align="start">
-          <div>
-            <Typography.Title level={3} style={{ margin: 0 }}>
-              {group?.name ?? "群聊"}
-            </Typography.Title>
-            <Typography.Text type="secondary">
-              {group ? `群号 ${group.code} · ${group.members.length} 位成员` : "正在加载"}
-            </Typography.Text>
-          </div>
-          <Space>
-            {isOwner && (
-              <>
-                <Button
-                  icon={<EditOutlined />}
-                  onClick={() => {
-                    setGroupNameDraft(group?.name ?? "");
-                    setRenaming(true);
-                  }}
-                >
-                  改名
-                </Button>
-                <Button
-                  danger
-                  icon={<DeleteOutlined />}
-                  onClick={() => {
-                    if (!group) {
-                      return;
-                    }
-                    modal.confirm({
-                      title: "解散群聊",
-                      content: `确认解散 ${group.name}？解散后所有成员都会失去该群聊。`,
-                      okText: "解散",
-                      okButtonProps: { danger: true },
-                      cancelText: "取消",
-                      onOk: async () => {
-                        await api.deleteGroup(apiClient, group.id);
-                        message.success("群聊已解散");
-                        navigate("/groups");
-                      }
-                    });
-                  }}
-                >
-                  解散
-                </Button>
-              </>
-            )}
-            <Button icon={<TeamOutlined />} onClick={() => setMembersOpen(true)}>
-              成员
-            </Button>
-            {canManageJoinRequests && (
-              <Button icon={<UserAddOutlined />} onClick={() => setJoinRequestsOpen(true)}>
-                申请 {joinRequests.length}
-              </Button>
-            )}
-            <Select
-              style={{ width: 240 }}
-              placeholder="选择好友入群"
-              options={inviteOptions}
-              value={inviteeId}
-              onChange={setInviteeId}
-            />
-            <Button
-              type="primary"
-              disabled={!inviteeId || !groupKey}
-              onClick={async () => {
-                const friend = friends.find((item) => item.id === inviteeId);
-                if (!friend || !groupKey) {
-                  return;
+  const groupTitle = group?.name ?? "群聊";
+  const groupSubtitle = group ? `群号 ${group.code} · ${group.members.length} 位成员` : "正在加载";
+  const profilePanel = (
+    <UserProfilePanel
+      title={groupTitle}
+      subtitle={groupSubtitle}
+      meta={[
+        { label: "群号", value: group?.code ?? "-" },
+        { label: "成员", value: group?.members.length ?? "-" },
+        { label: "我的角色", value: myMembership ? roleLabel(myMembership.role) : "-" },
+        { label: "密钥版本", value: keyVersion },
+        { label: "解密状态", value: groupKey ? "群密钥已就绪" : "等待群密钥" }
+      ]}
+    />
+  );
+  const headerActions = (
+    <>
+      {isOwner && (
+        <>
+          <Button
+            icon={<EditOutlined />}
+            onClick={() => {
+              setGroupNameDraft(group?.name ?? "");
+              setRenaming(true);
+            }}
+          >
+            改名
+          </Button>
+          <Button
+            danger
+            icon={<DeleteOutlined />}
+            onClick={() => {
+              if (!group) {
+                return;
+              }
+              modal.confirm({
+                title: "解散群聊",
+                content: `确认解散 ${group.name}？解散后所有成员都会失去该群聊。`,
+                okText: "解散",
+                okButtonProps: { danger: true },
+                cancelText: "取消",
+                onOk: async () => {
+                  await api.deleteGroup(apiClient, group.id);
+                  message.success("群聊已解散");
+                  navigate("/groups");
                 }
-                const encryptedGroupKey = await wrapGroupKeyForUser(groupKey, friend.publicKey);
-                await api.createGroupInvite(apiClient, groupId, {
-                  inviteeId: friend.id,
-                  encryptedGroupKey,
-                  keyVersion
-                });
-                setInviteeId(undefined);
-                message.success("群邀请已发送");
-              }}
-            >
-              邀请
-            </Button>
-          </Space>
-        </Space>
-      </div>
-      <div className="message-list" ref={messageListRef}>
-        {rendered.length === 0 ? (
-          <Empty description="暂无消息" />
-        ) : (
-          <Space direction="vertical" size={0} style={{ width: "100%" }}>
-            {rendered.map((item) => (
-              <MessageBubble
-                key={item.clientMessageId}
-                message={item}
-                onMentionSender={mentionSender}
-                onQuoteMessage={quoteMessage}
-                onRecallMessage={recallMessage}
-              />
-            ))}
-          </Space>
-        )}
-      </div>
-      <ChatComposer
-        disabled={!groupKey || !socket}
-        insertRequest={composerInsert}
-        onSendMessage={async (parts) => {
-          try {
-            await sendMessage(parts);
-          } catch (error) {
-            message.error(error instanceof Error ? error.message : "发送失败");
-          }
-        }}
+              });
+            }}
+          >
+            解散
+          </Button>
+        </>
+      )}
+      {!isOwner && myMembership && group && user && (
+        <Button
+          danger
+          icon={<LogoutOutlined />}
+          onClick={() => {
+            modal.confirm({
+              title: "退出群聊",
+              content: `确认退出 ${group.name}？退出后将无法继续接收这个群聊的新消息。`,
+              okText: "退出",
+              okButtonProps: { danger: true },
+              cancelText: "取消",
+              onOk: async () => {
+                await api.removeGroupMember(apiClient, group.id, user.id);
+                message.success("已退出群聊");
+                navigate("/groups");
+              }
+            });
+          }}
+        >
+          退出
+        </Button>
+      )}
+      <Button icon={<TeamOutlined />} onClick={() => setMembersOpen(true)}>
+        成员
+      </Button>
+      {canManageJoinRequests && (
+        <Button icon={<UserAddOutlined />} onClick={() => setJoinRequestsOpen(true)}>
+          申请 {joinRequests.length}
+        </Button>
+      )}
+      <Select
+        className="group-invite-select"
+        placeholder="选择好友入群"
+        options={inviteOptions}
+        value={inviteeId}
+        onChange={setInviteeId}
       />
+      <Button
+        type="primary"
+        disabled={!inviteeId || !groupKey}
+        onClick={async () => {
+          const friend = friends.find((item) => item.id === inviteeId);
+          if (!friend || !groupKey) {
+            return;
+          }
+          const encryptedGroupKey = await wrapGroupKeyForUser(groupKey, friend.publicKey);
+          await api.createGroupInvite(apiClient, groupId, {
+            inviteeId: friend.id,
+            encryptedGroupKey,
+            keyVersion
+          });
+          setInviteeId(undefined);
+          message.success("群邀请已发送");
+        }}
+      >
+        邀请
+      </Button>
+    </>
+  );
+
+  return (
+    <section className="chat-workspace">
+      <div className="surface chat-main chat-shell">
+        <ChatHeader
+          title={groupTitle}
+          subtitle={groupSubtitle}
+          avatarText={groupTitle}
+          backTo="/groups"
+          actions={headerActions}
+          profileTitle="群资料"
+          profilePanel={profilePanel}
+        />
+        <MessageList
+          ref={messageListRef}
+          messages={rendered}
+          onMentionSender={mentionSender}
+          onQuoteMessage={quoteMessage}
+          onRecallMessage={recallMessage}
+        />
+        <ChatComposer
+          disabled={!groupKey || !socket}
+          insertRequest={composerInsert}
+          onSendMessage={async (parts) => {
+            try {
+              await sendMessage(parts);
+            } catch (error) {
+              message.error(error instanceof Error ? error.message : "发送失败");
+            }
+          }}
+        />
+      </div>
+      {profilePanel}
       <Modal
         title="修改群名称"
         open={renaming}

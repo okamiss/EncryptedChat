@@ -107,6 +107,14 @@ export class FriendsService {
 
     const view = presentFriendRequest(updated);
     this.realtime.emitToUser(request.requesterId, SocketEvents.FriendAccepted, view);
+    this.realtime.emitToUser(request.requesterId, SocketEvents.FriendUpdated, {
+      userId,
+      action: "accepted"
+    });
+    this.realtime.emitToUser(userId, SocketEvents.FriendUpdated, {
+      userId: request.requesterId,
+      action: "accepted"
+    });
     return view;
   }
 
