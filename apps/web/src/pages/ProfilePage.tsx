@@ -1,19 +1,55 @@
-import { IdcardOutlined, KeyOutlined, ReloadOutlined, UserOutlined } from "@ant-design/icons";
+import { DownloadOutlined, IdcardOutlined, KeyOutlined, ReloadOutlined, UploadOutlined, UserOutlined } from "@ant-design/icons";
 import { Button, Descriptions, Form, Input, Space, Typography, App } from "antd";
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as api from "../services/api";
 import { useAuth } from "../state/AuthContext";
 import { displayUserName } from "../utils/displayName";
 
 export function ProfilePage() {
-  const { apiClient, user, privateKeyStatus, unlockPrivateKey, refreshMe } = useAuth();
+  const {
+    apiClient,
+    user,
+    privateKeyStatus,
+    unlockPrivateKey,
+    exportPrivateKeyBackup,
+    importPrivateKeyBackup,
+    refreshMe
+  } = useAuth();
   const { message } = App.useApp();
   const [displayNameForm] = Form.useForm<{ displayName?: string }>();
+  const [backupForm] = Form.useForm<{ password: string }>();
+  const [backupFile, setBackupFile] = useState<File>();
+  const backupInputRef = useRef<HTMLInputElement>(null);
   const publicKeyKid = (user?.publicKey as { kid?: string } | undefined)?.kid;
 
   useEffect(() => {
     displayNameForm.setFieldsValue({ displayName: user?.displayName ?? "" });
   }, [displayNameForm, user?.displayName]);
+
+  const handleExportBackup = async () => {
+    try {
+      const backupText = await exportPrivateKeyBackup();
+      downloadTextFile(`${safeFileName(user?.username ?? "encrypted-chat")}-private-key-backup.json`, backupText);
+      message.success("私钥备份已导出");
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "私钥备份导出失败");
+    }
+  };
+
+  const handleImportBackup = async (values: { password: string }) => {
+    if (!backupFile) {
+      message.error("请选择私钥备份文件");
+      return;
+    }
+    try {
+      await importPrivateKeyBackup(await backupFile.text(), values.password);
+      backupForm.resetFields();
+      setBackupFile(undefined);
+      message.success("私钥备份已导入并解锁");
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "私钥备份导入失败");
+    }
+  };
 
   return (
     <section className="surface">
@@ -89,7 +125,53 @@ export function ProfilePage() {
             </Button>
           </Form>
         )}
+        <Space direction="vertical" size={10} style={{ width: "100%" }}>
+          <Typography.Title level={5} style={{ margin: 0 }}>
+            私钥备份
+          </Typography.Title>
+          <Space wrap>
+            <Button icon={<DownloadOutlined />} onClick={() => void handleExportBackup()} disabled={!user}>
+              导出私钥备份
+            </Button>
+            <input
+              ref={backupInputRef}
+              type="file"
+              accept="application/json,.json"
+              hidden
+              onChange={(event) => {
+                setBackupFile(event.currentTarget.files?.[0]);
+                event.currentTarget.value = "";
+              }}
+            />
+            <Button icon={<UploadOutlined />} onClick={() => backupInputRef.current?.click()} disabled={!user}>
+              选择备份文件
+            </Button>
+            <Typography.Text type="secondary">{backupFile?.name ?? "未选择文件"}</Typography.Text>
+          </Space>
+          <Form form={backupForm} layout="inline" onFinish={handleImportBackup}>
+            <Form.Item name="password" rules={[{ required: true, message: "请输入登录密码" }]}>
+              <Input.Password placeholder="输入登录密码导入私钥" />
+            </Form.Item>
+            <Button type="primary" htmlType="submit" icon={<KeyOutlined />} disabled={!backupFile}>
+              导入并解锁
+            </Button>
+          </Form>
+        </Space>
       </Space>
     </section>
   );
+}
+
+function downloadTextFile(fileName: string, text: string): void {
+  const blob = new Blob([text], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function safeFileName(value: string): string {
+  return value.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "encrypted-chat";
 }

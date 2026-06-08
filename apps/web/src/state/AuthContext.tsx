@@ -18,6 +18,7 @@ import {
   conversationKeyForRecall,
   removeLocalMessage
 } from "../storage/localMessages";
+import { createPrivateKeyBackup, parsePrivateKeyBackup } from "../storage/privateKeyBackup";
 import { getPrivateKeyRecord, savePrivateKeyRecord } from "../storage/privateKeyStore";
 import {
   addUnreadConversation,
@@ -38,6 +39,8 @@ interface AuthContextValue {
   register: (username: string, password: string) => Promise<void>;
   login: (username: string, password: string) => Promise<void>;
   unlockPrivateKey: (password: string) => Promise<void>;
+  exportPrivateKeyBackup: () => Promise<string>;
+  importPrivateKeyBackup: (backupText: string, password: string) => Promise<void>;
   logout: () => void;
   markConversationRead: (conversationKey: string) => void;
   refreshMe: () => Promise<void>;
@@ -127,6 +130,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [user]
   );
 
+  const exportPrivateKeyBackup = useCallback(async () => {
+    if (!user) {
+      throw new Error("请先登录");
+    }
+    const record = await getPrivateKeyRecord(user.id);
+    if (!record) {
+      throw new Error("当前浏览器没有保存私钥，无法导出备份");
+    }
+    return createPrivateKeyBackup(record);
+  }, [user]);
+
+  const importPrivateKeyBackup = useCallback(
+    async (backupText: string, password: string) => {
+      if (!user) {
+        throw new Error("请先登录");
+      }
+      const record = parsePrivateKeyBackup(backupText, user.id);
+      if (!publicKeysMatch(record.publicKey, user.publicKey)) {
+        throw new Error("备份文件的公钥与当前账号不匹配");
+      }
+      const unlocked = await decryptPrivateKeyFromStorage(record, password);
+      await savePrivateKeyRecord(record);
+      setPrivateKey(unlocked);
+      setPrivateKeyStatus("ready");
+    },
+    [user]
+  );
+
   const refreshMe = useCallback(async () => {
     if (!token) {
       return;
@@ -208,6 +239,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         register,
         login,
         unlockPrivateKey,
+        exportPrivateKeyBackup,
+        importPrivateKeyBackup,
         logout,
         markConversationRead,
         refreshMe
@@ -224,4 +257,8 @@ export function useAuth(): AuthContextValue {
     throw new Error("useAuth must be used inside AuthProvider");
   }
   return value;
+}
+
+function publicKeysMatch(a: JsonWebKey, b: JsonWebKey): boolean {
+  return a.kty === b.kty && a.e === b.e && a.n === b.n;
 }
