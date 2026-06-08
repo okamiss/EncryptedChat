@@ -1,12 +1,13 @@
 import type { EncryptedMessageEnvelope, FriendView } from "@encrypted-chat/shared";
 import { SocketEvents } from "@encrypted-chat/shared";
 import { App, Empty, Space, Typography } from "antd";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { ChatComposer } from "../components/ChatComposer";
+import { ChatComposer, type ComposerInsertRequest } from "../components/ChatComposer";
 import { MessageBubble, type RenderedMessage } from "../components/MessageBubble";
 import { decryptImageBlob, encryptImageFile } from "../crypto/files";
 import { decryptDirectMessage, encryptDirectMessage, type PlainMessage } from "../crypto/messages";
+import { useAutoScrollToBottom } from "../hooks/useAutoScrollToBottom";
 import * as api from "../services/api";
 import { useAuth } from "../state/AuthContext";
 import { appendLocalMessage, getLocalMessages } from "../storage/localMessages";
@@ -19,7 +20,8 @@ export function ChatPage() {
   const [friends, setFriends] = useState<FriendView[]>([]);
   const [envelopes, setEnvelopes] = useState<EncryptedMessageEnvelope[]>([]);
   const [rendered, setRendered] = useState<RenderedMessage[]>([]);
-  const messageListRef = useRef<HTMLDivElement>(null);
+  const [composerInsert, setComposerInsert] = useState<ComposerInsertRequest>();
+  const messageListRef = useAutoScrollToBottom(rendered);
 
   const friend = friends.find((item) => item.id === friendId);
   const conversationKey = useMemo(() => `direct:${friendId}`, [friendId]);
@@ -35,13 +37,6 @@ export function ChatPage() {
     setEnvelopes(getLocalMessages(conversationKey));
     markConversationRead(conversationKey);
   }, [conversationKey, markConversationRead]);
-
-  useEffect(() => {
-    const list = messageListRef.current;
-    if (list) {
-      list.scrollTop = list.scrollHeight;
-    }
-  }, [rendered.length]);
 
   useEffect(() => {
     if (!socket || !user) {
@@ -163,6 +158,27 @@ export function ChatPage() {
     [apiClient, friend, socket, user]
   );
 
+  const quoteMessage = useCallback((message: RenderedMessage) => {
+    const text = quoteTextForMessage(message);
+    if (!text) {
+      return;
+    }
+    setComposerInsert({
+      id: `${message.clientMessageId}:quote:${Date.now()}`,
+      type: "quote",
+      senderName: message.senderName,
+      text
+    });
+  }, []);
+
+  const mentionSender = useCallback((message: RenderedMessage) => {
+    setComposerInsert({
+      id: `${message.clientMessageId}:mention:${Date.now()}`,
+      type: "mention",
+      label: message.senderName
+    });
+  }, []);
+
   return (
     <section className="surface chat-shell">
       <div className="chat-header">
@@ -177,13 +193,19 @@ export function ChatPage() {
         ) : (
           <Space direction="vertical" size={0} style={{ width: "100%" }}>
             {rendered.map((item) => (
-              <MessageBubble key={item.clientMessageId} message={item} />
+              <MessageBubble
+                key={item.clientMessageId}
+                message={item}
+                onMentionSender={mentionSender}
+                onQuoteMessage={quoteMessage}
+              />
             ))}
           </Space>
         )}
       </div>
       <ChatComposer
         disabled={!friend || !socket}
+        insertRequest={composerInsert}
         onSendText={async (text) => {
           try {
             await sendText(text);
@@ -255,4 +277,8 @@ function failedView(envelope: EncryptedMessageEnvelope, own: boolean, senderName
     sentAt: envelope.sentAt,
     status: "failed"
   };
+}
+
+function quoteTextForMessage(message: RenderedMessage): string | undefined {
+  return message.text ?? (message.imageName ? `[图片] ${message.imageName}` : undefined);
 }

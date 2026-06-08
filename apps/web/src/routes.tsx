@@ -5,8 +5,11 @@ import {
   TeamOutlined,
   UserOutlined
 } from "@ant-design/icons";
+import type { FriendView, GroupView } from "@encrypted-chat/shared";
 import { Alert, Badge, Button, Layout, Menu, Space, Typography } from "antd";
+import { useEffect, useState } from "react";
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import * as api from "./services/api";
 import { useAuth } from "./state/AuthContext";
 import { AddFriendPage } from "./pages/AddFriendPage";
 import { ChatPage } from "./pages/ChatPage";
@@ -17,6 +20,8 @@ import { GroupsPage } from "./pages/GroupsPage";
 import { LoginPage } from "./pages/LoginPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { RegisterPage } from "./pages/RegisterPage";
+import { ThemeModeButton } from "./components/ThemeModeButton";
+import { displayUserName } from "./utils/displayName";
 
 export function AppRoutes() {
   return (
@@ -49,16 +54,78 @@ function ProtectedRoute() {
 }
 
 function AppLayout() {
-  const { user, privateKeyStatus, logout, unreadConversationKeys } = useAuth();
+  const { apiClient, user, privateKeyStatus, logout, unreadConversationKeys } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [quickFriends, setQuickFriends] = useState<FriendView[]>([]);
+  const [quickGroups, setQuickGroups] = useState<GroupView[]>([]);
   const hasDirectUnread = unreadConversationKeys.some((key) => key.startsWith("direct:"));
   const hasGroupUnread = unreadConversationKeys.some((key) => key.startsWith("group:"));
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all([api.listFriends(apiClient), api.listGroups(apiClient)])
+      .then(([friends, groups]) => {
+        if (cancelled) {
+          return;
+        }
+        setQuickFriends(friends.slice(0, 3));
+        setQuickGroups(groups.slice(0, 3));
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setQuickFriends([]);
+          setQuickGroups([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [apiClient]);
 
   return (
     <Layout className="app-layout">
       <Layout.Sider breakpoint="lg" collapsedWidth="0" width={236} className="app-sider">
         <div className="brand">EncryptedChat</div>
+        {(quickFriends.length > 0 || quickGroups.length > 0) && (
+          <div className="side-quick">
+            <Typography.Text className="side-quick-title">快捷入口</Typography.Text>
+            <div className="side-quick-list">
+              {quickFriends.map((friend) => {
+                const key = `direct:${friend.id}`;
+                const active = location.pathname === `/chats/${friend.id}`;
+                return (
+                  <button
+                    key={friend.id}
+                    type="button"
+                    className={`side-quick-item${active ? " active" : ""}`}
+                    onClick={() => navigate(`/chats/${friend.id}`)}
+                  >
+                    <MessageOutlined />
+                    <span>{displayUserName(friend)}</span>
+                    <Badge dot={unreadConversationKeys.includes(key)} />
+                  </button>
+                );
+              })}
+              {quickGroups.map((group) => {
+                const key = `group:${group.id}`;
+                const active = location.pathname === `/groups/${group.id}`;
+                return (
+                  <button
+                    key={group.id}
+                    type="button"
+                    className={`side-quick-item${active ? " active" : ""}`}
+                    onClick={() => navigate(`/groups/${group.id}`)}
+                  >
+                    <TeamOutlined />
+                    <span>{group.name}</span>
+                    <Badge dot={unreadConversationKeys.includes(key)} />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
         <Menu
           theme="dark"
           mode="inline"
@@ -73,14 +140,17 @@ function AppLayout() {
         />
       </Layout.Sider>
       <Layout>
-        <Layout.Header style={{ background: "#fff", borderBottom: "1px solid #dbe3ef", paddingInline: 20 }}>
+        <Layout.Header className="app-header">
           <Space style={{ width: "100%", justifyContent: "space-between" }}>
             <Space>
               <MessageOutlined />
               <Typography.Text strong>{user?.username}</Typography.Text>
               <Typography.Text type="secondary">UID {user?.uid}</Typography.Text>
             </Space>
-            <Button onClick={logout}>退出</Button>
+            <Space>
+              <ThemeModeButton />
+              <Button onClick={logout}>退出</Button>
+            </Space>
           </Space>
         </Layout.Header>
         <Layout.Content className="app-content">

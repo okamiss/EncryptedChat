@@ -1,5 +1,5 @@
-import { FileImageOutlined, LockOutlined } from "@ant-design/icons";
-import { Image, Space, Typography } from "antd";
+import { CommentOutlined, FileImageOutlined, LockOutlined, UserOutlined } from "@ant-design/icons";
+import { Button, Image, Space, Tooltip, Typography } from "antd";
 
 export interface RenderedMessage {
   clientMessageId: string;
@@ -12,7 +12,15 @@ export interface RenderedMessage {
   imageName?: string;
 }
 
-export function MessageBubble({ message }: { message: RenderedMessage }) {
+interface MessageBubbleProps {
+  message: RenderedMessage;
+  onMentionSender?: (message: RenderedMessage) => void;
+  onQuoteMessage?: (message: RenderedMessage) => void;
+}
+
+export function MessageBubble({ message, onMentionSender, onQuoteMessage }: MessageBubbleProps) {
+  const canUseActions = !message.own && message.status === "decrypted";
+
   return (
     <div className={`message-row ${message.own ? "own" : ""}`}>
       <div className="message-bubble">
@@ -40,6 +48,32 @@ export function MessageBubble({ message }: { message: RenderedMessage }) {
           </Typography.Text>
         )}
       </div>
+      {canUseActions && (onQuoteMessage || onMentionSender) && (
+        <div className="message-actions">
+          {onQuoteMessage && (
+            <Tooltip title="引用这条消息">
+              <Button
+                aria-label="引用这条消息"
+                size="small"
+                type="text"
+                icon={<CommentOutlined />}
+                onClick={() => onQuoteMessage(message)}
+              />
+            </Tooltip>
+          )}
+          {onMentionSender && (
+            <Tooltip title="@这个人">
+              <Button
+                aria-label="@这个人"
+                size="small"
+                type="text"
+                icon={<UserOutlined />}
+                onClick={() => onMentionSender(message)}
+              />
+            </Tooltip>
+          )}
+        </div>
+      )}
     </div>
   );
 }

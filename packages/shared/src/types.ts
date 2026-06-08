@@ -142,6 +142,7 @@ export interface EncryptedMessageEnvelope {
   aad: string;
   wrappedKeys?: WrappedMessageKey[];
   groupKeyVersion?: number;
+  mentionedUserIds?: string[];
   attachment?: EncryptedAttachmentRef;
   sentAt?: string;
 }

@@ -1,23 +1,34 @@
 import { PictureOutlined, SendOutlined, SmileOutlined } from "@ant-design/icons";
-import { Button, Input, Popover, Space, Upload } from "antd";
-import { useState } from "react";
+import { Button, Input, Popover, Space, Upload, type InputRef } from "antd";
+import { useEffect, useRef, useState } from "react";
+
+export type ComposerInsertRequest =
+  | { id: string; type: "quote"; senderName: string; text: string }
+  | { id: string; type: "mention"; label: string };
 
 interface ChatComposerProps {
   disabled?: boolean;
+  insertRequest?: ComposerInsertRequest;
   onSendText: (text: string) => Promise<void>;
   onSendImage: (file: File) => Promise<void>;
 }
 
 const SYSTEM_EMOJIS = ["😊", "😂", "😍", "👍", "🙏", "🎉", "❤️", "🔥", "😎", "😭", "🤔", "👌"];
 
-export function ChatComposer({ disabled, onSendText, onSendImage }: ChatComposerProps) {
+export function ChatComposer({ disabled, insertRequest, onSendText, onSendImage }: ChatComposerProps) {
+  const inputRef = useRef<InputRef>(null);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
 
+  const focusInput = () => {
+    window.setTimeout(() => inputRef.current?.focus(), 0);
+  };
+
   const sendText = async () => {
     const trimmed = text.trim();
     if (!trimmed) {
+      focusInput();
       return;
     }
     setSending(true);
@@ -26,20 +37,37 @@ export function ChatComposer({ disabled, onSendText, onSendImage }: ChatComposer
       setText("");
     } finally {
       setSending(false);
+      focusInput();
     }
   };
 
   const insertEmoji = (emoji: string) => {
     setText((current) => `${current}${emoji}`);
     setEmojiOpen(false);
+    focusInput();
   };
+
+  useEffect(() => {
+    if (!insertRequest) {
+      return;
+    }
+    if (insertRequest.type === "mention") {
+      setText((current) => `${current}${current.endsWith(" ") || current.length === 0 ? "" : " "}@${insertRequest.label} `);
+      focusInput();
+      return;
+    }
+    const quoteText = insertRequest.text.replace(/\s+/g, " ").slice(0, 160);
+    setText((current) => `${current}${current.trim().length > 0 ? "\n" : ""}> ${insertRequest.senderName}: ${quoteText}\n\n`);
+    focusInput();
+  }, [insertRequest]);
 
   return (
     <div className="composer">
       <Space.Compact style={{ width: "100%" }}>
         <Input.TextArea
+          ref={inputRef}
           value={text}
-          autoSize={{ minRows: 1, maxRows: 4 }}
+          autoSize={{ minRows: 5, maxRows: 5 }}
           disabled={disabled || sending}
           placeholder="输入加密消息"
           onChange={(event) => setText(event.target.value)}

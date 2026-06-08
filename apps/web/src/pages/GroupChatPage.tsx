@@ -2,9 +2,9 @@ import { CheckOutlined, EditOutlined, StopOutlined, TeamOutlined, UserAddOutline
 import type { EncryptedMessageEnvelope, FriendView, GroupJoinRequestView, GroupView } from "@encrypted-chat/shared";
 import { SocketEvents } from "@encrypted-chat/shared";
 import { App, Button, Empty, Input, List, Modal, Select, Space, Typography } from "antd";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { ChatComposer } from "../components/ChatComposer";
+import { ChatComposer, type ComposerInsertRequest } from "../components/ChatComposer";
 import { MessageBubble, type RenderedMessage } from "../components/MessageBubble";
 import { decryptImageBlob, encryptImageFile } from "../crypto/files";
 import {
@@ -14,10 +14,12 @@ import {
   unwrapGroupKey,
   wrapGroupKeyForUser
 } from "../crypto/messages";
+import { useAutoScrollToBottom } from "../hooks/useAutoScrollToBottom";
 import * as api from "../services/api";
 import { useAuth } from "../state/AuthContext";
 import { appendLocalMessage, getLocalMessages } from "../storage/localMessages";
 import { displayUserName } from "../utils/displayName";
+import { mentionedUserIdsInText } from "../utils/mentions";
 
 export function GroupChatPage() {
   const { groupId = "" } = useParams();
@@ -34,7 +36,8 @@ export function GroupChatPage() {
   const [joinRequests, setJoinRequests] = useState<GroupJoinRequestView[]>([]);
   const [renaming, setRenaming] = useState(false);
   const [groupNameDraft, setGroupNameDraft] = useState("");
-  const messageListRef = useRef<HTMLDivElement>(null);
+  const [composerInsert, setComposerInsert] = useState<ComposerInsertRequest>();
+  const messageListRef = useAutoScrollToBottom(rendered);
 
   const conversationKey = useMemo(() => `group:${groupId}`, [groupId]);
   const myMembership = group?.members.find((member) => member.user.id === user?.id);
@@ -71,13 +74,6 @@ export function GroupChatPage() {
     setEnvelopes(getLocalMessages(conversationKey));
     markConversationRead(conversationKey);
   }, [conversationKey, markConversationRead]);
-
-  useEffect(() => {
-    const list = messageListRef.current;
-    if (list) {
-      list.scrollTop = list.scrollHeight;
-    }
-  }, [rendered.length]);
 
   useEffect(() => {
     if (!privateKey || !myMembership) {
@@ -174,9 +170,13 @@ export function GroupChatPage() {
         groupKey,
         keyVersion
       });
+      const mentionedUserIds = group ? mentionedUserIdsInText(text, group.members) : [];
+      if (mentionedUserIds.length > 0) {
+        envelope.mentionedUserIds = mentionedUserIds;
+      }
       socket.emit(SocketEvents.MessageSend, envelope);
     },
-    [groupId, groupKey, keyVersion, socket]
+    [group, groupId, groupKey, keyVersion, socket]
   );
 
   const sendImage = useCallback(
@@ -216,6 +216,27 @@ export function GroupChatPage() {
     },
     [apiClient, groupId, groupKey, keyVersion, socket]
   );
+
+  const quoteMessage = useCallback((message: RenderedMessage) => {
+    const text = quoteTextForMessage(message);
+    if (!text) {
+      return;
+    }
+    setComposerInsert({
+      id: `${message.clientMessageId}:quote:${Date.now()}`,
+      type: "quote",
+      senderName: message.senderName,
+      text
+    });
+  }, []);
+
+  const mentionSender = useCallback((message: RenderedMessage) => {
+    setComposerInsert({
+      id: `${message.clientMessageId}:mention:${Date.now()}`,
+      type: "mention",
+      label: message.senderName
+    });
+  }, []);
 
   const inviteOptions = friends
     .filter((friend) => !group?.members.some((member) => member.user.id === friend.id))
@@ -289,13 +310,19 @@ export function GroupChatPage() {
         ) : (
           <Space direction="vertical" size={0} style={{ width: "100%" }}>
             {rendered.map((item) => (
-              <MessageBubble key={item.clientMessageId} message={item} />
+              <MessageBubble
+                key={item.clientMessageId}
+                message={item}
+                onMentionSender={mentionSender}
+                onQuoteMessage={quoteMessage}
+              />
             ))}
           </Space>
         )}
       </div>
       <ChatComposer
         disabled={!groupKey || !socket}
+        insertRequest={composerInsert}
         onSendText={async (text) => {
           try {
             await sendText(text);
@@ -470,4 +497,8 @@ function failedView(envelope: EncryptedMessageEnvelope, own: boolean, senderName
     sentAt: envelope.sentAt,
     status: "failed"
   };
+}
+
+function quoteTextForMessage(message: RenderedMessage): string | undefined {
+  return message.text ?? (message.imageName ? `[图片] ${message.imageName}` : undefined);
 }

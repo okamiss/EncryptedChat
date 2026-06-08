@@ -1,6 +1,7 @@
 import { LockOutlined, UserOutlined } from "@ant-design/icons";
 import { Button, Form, Input, Space, Typography, App } from "antd";
 import { Link, useNavigate } from "react-router-dom";
+import { ThemeModeButton } from "../components/ThemeModeButton";
 import { useAuth } from "../state/AuthContext";
 
 export function RegisterPage() {
@@ -10,6 +11,9 @@ export function RegisterPage() {
 
   return (
     <main className="auth-shell">
+      <div className="auth-theme-toggle">
+        <ThemeModeButton />
+      </div>
       <section className="auth-panel">
         <Space direction="vertical" size={18} style={{ width: "100%" }}>
           <div>
