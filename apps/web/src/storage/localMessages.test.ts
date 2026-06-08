@@ -1,6 +1,12 @@
 import type { EncryptedMessageEnvelope } from "@encrypted-chat/shared";
 import { beforeEach, describe, expect, it } from "vitest";
-import { appendLocalMessage, conversationKeyForRecall, getLocalMessages, removeLocalMessage } from "./localMessages";
+import {
+  appendLocalMessage,
+  conversationKeyForRecall,
+  getLocalMessages,
+  hasLocalMessage,
+  removeLocalMessage
+} from "./localMessages";
 
 function message(clientMessageId: string): EncryptedMessageEnvelope {
   return {
@@ -26,6 +32,13 @@ describe("localMessages", () => {
     removeLocalMessage("group:group-1", "message-1");
 
     expect(getLocalMessages("group:group-1").map((item) => item.clientMessageId)).toEqual(["message-2"]);
+  });
+
+  it("reports whether a local conversation already has a message", () => {
+    appendLocalMessage("group:group-1", message("message-1"));
+
+    expect(hasLocalMessage("group:group-1", "message-1")).toBe(true);
+    expect(hasLocalMessage("group:group-1", "message-2")).toBe(false);
   });
 
   it("builds the group conversation key for a recalled group message", () => {

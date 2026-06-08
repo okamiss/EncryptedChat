@@ -4,6 +4,7 @@ import type {
   CreateFriendRequestRequest,
   CreateGroupInviteRequest,
   CreateGroupJoinRequestRequest,
+  EncryptedMessageEnvelope,
   CreateGroupRequest,
   FriendRequestView,
   FriendView,
@@ -140,6 +141,10 @@ export function rejectGroupJoinRequest(client: ApiClient, id: string) {
 
 export function listGroupInvites(client: ApiClient) {
   return request<GroupInviteView[]>("/group-invites", { client });
+}
+
+export function listMessages(client: ApiClient) {
+  return request<EncryptedMessageEnvelope[]>("/messages", { client });
 }
 
 export function acceptGroupInvite(client: ApiClient, id: string) {

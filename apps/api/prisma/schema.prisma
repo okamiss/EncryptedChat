@@ -44,6 +44,8 @@ model User {
   groupJoinRequests       GroupJoinRequest[] @relation("GroupJoinRequestApplicant")
   encryptedFiles          EncryptedFile[] @relation("EncryptedFileOwner")
   directFilesReceived     EncryptedFile[] @relation("EncryptedFileTargetUser")
+  sentMessages            EncryptedMessage[] @relation("EncryptedMessageSender")
+  receivedDirectMessages  EncryptedMessage[] @relation("EncryptedMessageRecipient")
 
   @@map("users")
 }
@@ -90,6 +92,7 @@ model Group {
   invites GroupInvite[]
   joinRequests GroupJoinRequest[]
   files   EncryptedFile[]
+  messages EncryptedMessage[]
 
   @@map("groups")
 }
@@ -166,4 +169,25 @@ model EncryptedFile {
   @@index([targetUserId])
   @@index([groupId])
   @@map("encrypted_files")
+}
+
+model EncryptedMessage {
+  id               String   @id @default(uuid()) @db.Uuid
+  clientMessageId  String   @unique @map("client_message_id") @db.VarChar(128)
+  conversationType String   @map("conversation_type") @db.VarChar(16)
+  senderId         String   @map("sender_id") @db.Uuid
+  recipientId      String?  @map("recipient_id") @db.Uuid
+  groupId          String?  @map("group_id") @db.Uuid
+  payload          Json
+  sentAt           DateTime @map("sent_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  sender    User   @relation("EncryptedMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient User?  @relation("EncryptedMessageRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  group     Group? @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([senderId, sentAt])
+  @@index([recipientId, sentAt])
+  @@index([groupId, sentAt])
+  @@map("encrypted_messages")
 }

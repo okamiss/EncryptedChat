@@ -16,6 +16,7 @@ import {
   appendLocalMessage,
   conversationKeyForEnvelope,
   conversationKeyForRecall,
+  hasLocalMessage,
   removeLocalMessage
 } from "../storage/localMessages";
 import { createPrivateKeyBackup, parsePrivateKeyBackup } from "../storage/privateKeyBackup";
@@ -192,6 +193,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setUnreadConversationKeys(user ? getUnreadConversations(user.id) : []);
   }, [user]);
+
+  useEffect(() => {
+    if (!token || !user) {
+      return;
+    }
+
+    let cancelled = false;
+    void api
+      .listMessages({ token })
+      .then((messages) => {
+        if (cancelled) {
+          return;
+        }
+        let nextUnread = getUnreadConversations(user.id);
+        for (const envelope of messages) {
+          const key = conversationKeyForEnvelope(envelope, user.id);
+          const isNew = !hasLocalMessage(key, envelope.clientMessageId);
+          appendLocalMessage(key, envelope);
+          if (isNew && envelope.fromUserId !== user.id) {
+            nextUnread = addUnreadConversation(user.id, key);
+          }
+        }
+        setUnreadConversationKeys(nextUnread);
+      })
+      .catch(() => {
+        message.warning("离线消息同步失败，稍后会在重新登录时再尝试。");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [message, token, user]);
 
   useEffect(() => {
     if (!token || !user) {

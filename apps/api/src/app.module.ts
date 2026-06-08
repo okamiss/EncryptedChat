@@ -4,6 +4,7 @@ import { AuthModule } from "./modules/auth/auth.module";
 import { FilesModule } from "./modules/files/files.module";
 import { FriendsModule } from "./modules/friends/friends.module";
 import { GroupsModule } from "./modules/groups/groups.module";
+import { MessagesModule } from "./modules/messages/messages.module";
 import { PrismaModule } from "./modules/prisma/prisma.module";
 import { RealtimeModule } from "./modules/realtime/realtime.module";
 import { UsersModule } from "./modules/users/users.module";
@@ -18,6 +19,7 @@ import { HealthController } from "./health.controller";
     UsersModule,
     FriendsModule,
     GroupsModule,
+    MessagesModule,
     FilesModule
   ],
   controllers: [HealthController]

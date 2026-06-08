@@ -19,6 +19,7 @@ import type {
 import { SocketEvents } from "@encrypted-chat/shared";
 import type { Server, Socket } from "socket.io";
 import { sortFriendPair } from "../../common/sort-friend-pair";
+import { MessagesService } from "../messages/messages.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { groupRoom, RealtimeEventsService, userRoom } from "./realtime-events.service";
 
@@ -46,6 +47,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
   constructor(
     private readonly jwtService: JwtService,
     private readonly prisma: PrismaService,
+    private readonly messagesService: MessagesService,
     private readonly realtimeEvents: RealtimeEventsService
   ) {}
 
@@ -167,6 +169,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       return;
     }
 
+    await this.messagesService.store(message);
     this.server.to(userRoom(senderId)).to(userRoom(message.toUserId)).emit(SocketEvents.MessageNew, message);
   }
 
@@ -188,6 +191,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       return;
     }
 
+    await this.messagesService.removeRecalled(senderId, payload);
     this.server.to(userRoom(senderId)).to(userRoom(payload.toUserId)).emit(SocketEvents.MessageRecalled, payload);
   }
 
@@ -213,6 +217,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       return;
     }
 
+    await this.messagesService.store(message);
     this.realtimeEvents.emitToGroup(message.groupId, SocketEvents.MessageNew, message);
   }
 
@@ -238,6 +243,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       return;
     }
 
+    await this.messagesService.removeRecalled(senderId, payload);
     this.realtimeEvents.emitToGroup(payload.groupId, SocketEvents.MessageRecalled, payload);
   }
 }

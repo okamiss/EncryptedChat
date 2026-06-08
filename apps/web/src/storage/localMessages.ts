@@ -37,6 +37,10 @@ export function appendLocalMessage(conversationKey: string, envelope: EncryptedM
   return messages;
 }
 
+export function hasLocalMessage(conversationKey: string, clientMessageId: string): boolean {
+  return getLocalMessages(conversationKey).some((message) => message.clientMessageId === clientMessageId);
+}
+
 export function removeLocalMessage(conversationKey: string, clientMessageId: string): EncryptedMessageEnvelope[] {
   const messages = getLocalMessages(conversationKey).filter((message) => message.clientMessageId !== clientMessageId);
   localStorage.setItem(storageKey(conversationKey), JSON.stringify(messages));

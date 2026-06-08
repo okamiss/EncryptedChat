@@ -50,6 +50,7 @@ const SYSTEM_EMOJIS = [
   "😾",
   "🙮"
 ];
+const IME_CARET_ANCHOR = "\u200b";
 
 export function ChatComposer({ disabled, insertRequest, onSendMessage }: ChatComposerProps) {
   const editorRef = useRef<HTMLDivElement>(null);
@@ -99,7 +100,10 @@ export function ChatComposer({ disabled, insertRequest, onSendMessage }: ChatCom
     imageIdRef.current += 1;
     const previewUrl = URL.createObjectURL(file);
     imagesRef.current.set(id, { file, previewUrl });
-    insertNodeAtCursor(createImageChip(id, file, previewUrl, () => removeDraftImage(id)), editorRef.current);
+    insertNodeAtCursor(
+      createImageChipWithTextAnchor(id, file, previewUrl, () => removeDraftImage(id)),
+      editorRef.current
+    );
     markDraftChanged();
     focusEditor();
   };
@@ -245,32 +249,45 @@ function createImageChip(id: string, file: File, previewUrl: string, onRemove: (
   return chip;
 }
 
-function insertNodeAtCursor(node: Node, editor: HTMLDivElement | null) {
+function createImageChipWithTextAnchor(id: string, file: File, previewUrl: string, onRemove: () => void) {
+  const fragment = document.createDocumentFragment();
+  const anchor = document.createTextNode(IME_CARET_ANCHOR);
+  fragment.append(createImageChip(id, file, previewUrl, onRemove), anchor);
+  return { fragment, anchor };
+}
+
+function insertNodeAtCursor(node: Node | { fragment: DocumentFragment; anchor: Node }, editor: HTMLDivElement | null) {
   if (!editor) {
     return;
   }
+  const insertable = node instanceof Node ? node : node.fragment;
+  const cursorAnchor = node instanceof Node ? node : node.anchor;
   const selection = window.getSelection();
   if (!selection || selection.rangeCount === 0 || !editor.contains(selection.anchorNode)) {
-    editor.append(node);
-    placeCursorAfter(node);
+    editor.append(insertable);
     editor.focus();
+    placeCursorInsideTextAnchor(cursorAnchor);
     return;
   }
 
   const range = selection.getRangeAt(0);
   range.deleteContents();
-  range.insertNode(node);
-  placeCursorAfter(node);
+  range.insertNode(insertable);
   editor.focus();
+  placeCursorInsideTextAnchor(cursorAnchor);
 }
 
-function placeCursorAfter(node: Node) {
+function placeCursorInsideTextAnchor(node: Node) {
   const selection = window.getSelection();
   if (!selection) {
     return;
   }
   const range = document.createRange();
-  range.setStartAfter(node);
+  if (node.nodeType === Node.TEXT_NODE) {
+    range.setStart(node, node.textContent?.length ?? 0);
+  } else {
+    range.setStartAfter(node);
+  }
   range.collapse(true);
   selection.removeAllRanges();
   selection.addRange(range);
@@ -286,14 +303,15 @@ function serializeDraft(
 
   const parts: ComposerMessagePart[] = [];
   const appendText = (text: string) => {
-    if (!text) {
+    const cleaned = text.replaceAll(IME_CARET_ANCHOR, "");
+    if (!cleaned) {
       return;
     }
     const previous = parts[parts.length - 1];
     if (previous?.type === "text") {
-      previous.text += text;
+      previous.text += cleaned;
     } else {
-      parts.push({ type: "text", text });
+      parts.push({ type: "text", text: cleaned });
     }
   };
 

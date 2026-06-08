@@ -62,6 +62,44 @@ describe("ChatComposer", () => {
     await waitFor(() => expect(onSendMessage).toHaveBeenCalledWith([{ type: "image", file }]));
   });
 
+  it("places the caret in an editable text node after inserting an image", () => {
+    const file = new File(["image"], "ime.png", { type: "image/png" });
+
+    render(<ChatComposer onSendMessage={vi.fn()} />);
+
+    fireEvent.paste(screen.getByRole("textbox"), {
+      clipboardData: {
+        items: [{ kind: "file", type: "image/png", getAsFile: () => file }]
+      }
+    });
+
+    const selection = window.getSelection();
+    expect(selection?.anchorNode?.nodeType).toBe(Node.TEXT_NODE);
+    expect(screen.getByRole("textbox").contains(selection?.anchorNode ?? null)).toBe(true);
+  });
+
+  it("sends Chinese text typed immediately after an inserted image", async () => {
+    const onSendMessage = vi.fn().mockResolvedValue(undefined);
+    const file = new File(["image"], "ime.png", { type: "image/png" });
+
+    render(<ChatComposer onSendMessage={onSendMessage} />);
+
+    fireEvent.paste(screen.getByRole("textbox"), {
+      clipboardData: {
+        items: [{ kind: "file", type: "image/png", getAsFile: () => file }]
+      }
+    });
+    typeAtCurrentSelection("你好");
+    fireEvent.click(screen.getByLabelText("发送"));
+
+    await waitFor(() =>
+      expect(onSendMessage).toHaveBeenCalledWith([
+        { type: "image", file },
+        { type: "text", text: "你好" }
+      ])
+    );
+  });
+
   it("sends text and draft images as one ordered message", async () => {
     const onSendMessage = vi.fn().mockResolvedValue(undefined);
     const file = new File(["image"], "mixed.png", { type: "image/png" });
@@ -134,6 +172,18 @@ function typeIntoComposer(text: string) {
   range.selectNodeContents(composer);
   range.collapse(false);
   const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  fireEvent.input(composer);
+}
+
+function typeAtCurrentSelection(text: string) {
+  const composer = screen.getByRole("textbox");
+  const selection = window.getSelection();
+  const range = selection?.rangeCount ? selection.getRangeAt(0) : document.createRange();
+  range.deleteContents();
+  range.insertNode(document.createTextNode(text));
+  range.collapse(false);
   selection?.removeAllRanges();
   selection?.addRange(range);
   fireEvent.input(composer);
