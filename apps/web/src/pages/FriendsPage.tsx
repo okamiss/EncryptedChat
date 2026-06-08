@@ -1,13 +1,14 @@
 import { CheckOutlined, MessageOutlined, ReloadOutlined, StopOutlined, UserAddOutlined } from "@ant-design/icons";
-import { App, Button, Empty, List, Space, Tabs, Typography } from "antd";
+import { App, Badge, Button, Empty, List, Space, Tabs, Typography } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { FriendRequestView, FriendView } from "@encrypted-chat/shared";
 import { useAuth } from "../state/AuthContext";
 import * as api from "../services/api";
+import { displayUserName } from "../utils/displayName";
 
 export function FriendsPage() {
-  const { apiClient } = useAuth();
+  const { apiClient, unreadConversationKeys } = useAuth();
   const { message } = App.useApp();
   const navigate = useNavigate();
   const [friends, setFriends] = useState<FriendView[]>([]);
@@ -49,7 +50,7 @@ export function FriendsPage() {
           items={[
             {
               key: "friends",
-              label: `好友列表 ${friends.length}`,
+              label: <Badge dot={unreadConversationKeys.some((key) => key.startsWith("direct:"))}>好友列表 {friends.length}</Badge>,
               children: (
                 <List
                   locale={{ emptyText: <Empty description="暂无好友" /> }}
@@ -67,7 +68,14 @@ export function FriendsPage() {
                         </Button>
                       ]}
                     >
-                      <List.Item.Meta title={friend.username} description={`UID ${friend.uid}`} />
+                      <List.Item.Meta
+                        title={
+                          <Badge dot={unreadConversationKeys.includes(`direct:${friend.id}`)}>
+                            {displayUserName(friend)}
+                          </Badge>
+                        }
+                        description={`用户名 ${friend.username} · UID ${friend.uid}`}
+                      />
                     </List.Item>
                   )}
                 />
@@ -109,7 +117,10 @@ export function FriendsPage() {
                         </Button>
                       ]}
                     >
-                      <List.Item.Meta title={request.requester.username} description={`UID ${request.requester.uid}`} />
+                      <List.Item.Meta
+                        title={displayUserName(request.requester)}
+                        description={`用户名 ${request.requester.username} · UID ${request.requester.uid}`}
+                      />
                     </List.Item>
                   )}
                 />
@@ -124,7 +135,10 @@ export function FriendsPage() {
                   dataSource={outgoing}
                   renderItem={(request) => (
                     <List.Item>
-                      <List.Item.Meta title={request.addressee.username} description={`UID ${request.addressee.uid}`} />
+                      <List.Item.Meta
+                        title={displayUserName(request.addressee)}
+                        description={`用户名 ${request.addressee.username} · UID ${request.addressee.uid}`}
+                      />
                     </List.Item>
                   )}
                 />

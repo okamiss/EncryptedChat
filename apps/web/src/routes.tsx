@@ -5,7 +5,7 @@ import {
   TeamOutlined,
   UserOutlined
 } from "@ant-design/icons";
-import { Layout, Menu, Space, Typography, Button, Alert } from "antd";
+import { Alert, Badge, Button, Layout, Menu, Space, Typography } from "antd";
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "./state/AuthContext";
 import { AddFriendPage } from "./pages/AddFriendPage";
@@ -49,9 +49,11 @@ function ProtectedRoute() {
 }
 
 function AppLayout() {
-  const { user, privateKeyStatus, logout } = useAuth();
+  const { user, privateKeyStatus, logout, unreadConversationKeys } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const hasDirectUnread = unreadConversationKeys.some((key) => key.startsWith("direct:"));
+  const hasGroupUnread = unreadConversationKeys.some((key) => key.startsWith("group:"));
 
   return (
     <Layout className="app-layout">
@@ -63,9 +65,9 @@ function AppLayout() {
           selectedKeys={[selectedKey(location.pathname)]}
           onClick={({ key }) => navigate(String(key))}
           items={[
-            { key: "/friends", icon: <ContactsOutlined />, label: "好友" },
+            { key: "/friends", icon: <ContactsOutlined />, label: <Badge dot={hasDirectUnread}>好友</Badge> },
             { key: "/add-friend", icon: <PlusOutlined />, label: "添加好友" },
-            { key: "/groups", icon: <TeamOutlined />, label: "群聊" },
+            { key: "/groups", icon: <TeamOutlined />, label: <Badge dot={hasGroupUnread}>群聊</Badge> },
             { key: "/profile", icon: <UserOutlined />, label: "个人信息" }
           ]}
         />

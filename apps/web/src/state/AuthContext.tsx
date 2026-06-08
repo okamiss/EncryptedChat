@@ -14,6 +14,11 @@ import * as api from "../services/api";
 import { createChatSocket } from "../services/socket";
 import { appendLocalMessage, conversationKeyForEnvelope } from "../storage/localMessages";
 import { getPrivateKeyRecord, savePrivateKeyRecord } from "../storage/privateKeyStore";
+import {
+  addUnreadConversation,
+  clearUnreadConversation,
+  getUnreadConversations
+} from "../storage/unreadConversations";
 
 type PrivateKeyStatus = "locked" | "ready" | "missing";
 
@@ -24,10 +29,12 @@ interface AuthContextValue {
   privateKeyStatus: PrivateKeyStatus;
   socket?: Socket;
   apiClient: api.ApiClient;
+  unreadConversationKeys: string[];
   register: (username: string, password: string) => Promise<void>;
   login: (username: string, password: string) => Promise<void>;
   unlockPrivateKey: (password: string) => Promise<void>;
   logout: () => void;
+  markConversationRead: (conversationKey: string) => void;
   refreshMe: () => Promise<void>;
 }
 
@@ -46,6 +53,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [privateKey, setPrivateKey] = useState<CryptoKey | undefined>();
   const [privateKeyStatus, setPrivateKeyStatus] = useState<PrivateKeyStatus>("locked");
   const [socket, setSocket] = useState<Socket | undefined>();
+  const [unreadConversationKeys, setUnreadConversationKeys] = useState<string[]>([]);
 
   const apiClient = useMemo(() => ({ token }), [token]);
 
@@ -123,6 +131,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(USER_KEY, JSON.stringify(nextUser));
   }, [token]);
 
+  const markConversationRead = useCallback(
+    (conversationKey: string) => {
+      if (!user) {
+        return;
+      }
+      setUnreadConversationKeys(clearUnreadConversation(user.id, conversationKey));
+    },
+    [user]
+  );
+
   const logout = useCallback(() => {
     socket?.disconnect();
     setSocket(undefined);
@@ -130,9 +148,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(undefined);
     setPrivateKey(undefined);
     setPrivateKeyStatus("locked");
+    setUnreadConversationKeys([]);
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
   }, [socket]);
+
+  useEffect(() => {
+    setUnreadConversationKeys(user ? getUnreadConversations(user.id) : []);
+  }, [user]);
 
   useEffect(() => {
     if (!token || !user) {
@@ -145,6 +168,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const handleMessage = (envelope: EncryptedMessageEnvelope) => {
       const key = conversationKeyForEnvelope(envelope, user.id);
       appendLocalMessage(key, envelope);
+      if (envelope.fromUserId !== user.id) {
+        setUnreadConversationKeys(addUnreadConversation(user.id, key));
+      }
     };
     nextSocket.on(SocketEvents.MessageNew, handleMessage);
     nextSocket.on("connect_error", () => {
@@ -167,10 +193,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         privateKeyStatus,
         socket,
         apiClient,
+        unreadConversationKeys,
         register,
         login,
         unlockPrivateKey,
         logout,
+        markConversationRead,
         refreshMe
       }}
     >

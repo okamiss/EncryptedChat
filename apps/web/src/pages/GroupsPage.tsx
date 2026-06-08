@@ -1,5 +1,6 @@
 import { CheckOutlined, MessageOutlined, PlusOutlined, ReloadOutlined, StopOutlined } from "@ant-design/icons";
-import { App, Button, Empty, List, Space, Tabs, Typography } from "antd";
+import { SocketEvents } from "@encrypted-chat/shared";
+import { App, Badge, Button, Empty, Form, Input, List, Space, Tabs, Typography } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { GroupInviteView, GroupView } from "@encrypted-chat/shared";
@@ -7,7 +8,7 @@ import { useAuth } from "../state/AuthContext";
 import * as api from "../services/api";
 
 export function GroupsPage() {
-  const { apiClient } = useAuth();
+  const { apiClient, socket, unreadConversationKeys } = useAuth();
   const { message } = App.useApp();
   const navigate = useNavigate();
   const [groups, setGroups] = useState<GroupView[]>([]);
@@ -22,6 +23,19 @@ export function GroupsPage() {
   useEffect(() => {
     void load().catch((error) => message.error(error instanceof Error ? error.message : "加载群聊失败"));
   }, [load, message]);
+
+  useEffect(() => {
+    if (!socket) {
+      return;
+    }
+    const handleGroupUpdated = () => {
+      void load();
+    };
+    socket.on(SocketEvents.GroupUpdated, handleGroupUpdated);
+    return () => {
+      socket.off(SocketEvents.GroupUpdated, handleGroupUpdated);
+    };
+  }, [load, socket]);
 
   return (
     <section className="surface">
@@ -43,33 +57,54 @@ export function GroupsPage() {
           items={[
             {
               key: "groups",
-              label: `我的群聊 ${groups.length}`,
+              label: <Badge dot={unreadConversationKeys.some((key) => key.startsWith("group:"))}>我的群聊 {groups.length}</Badge>,
               children: (
-                <List
-                  locale={{ emptyText: <Empty description="暂无群聊" /> }}
-                  dataSource={groups}
-                  renderItem={(group) => (
-                    <List.Item
-                      actions={[
-                        <Button
-                          key="chat"
-                          type="primary"
-                          icon={<MessageOutlined />}
-                          onClick={() => navigate(`/groups/${group.id}`)}
-                        >
-                          进入
-                        </Button>
-                      ]}
-                    >
-                      <List.Item.Meta title={group.name} description={`${group.members.length} 位成员`} />
-                    </List.Item>
-                  )}
-                />
+                <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                  <Form
+                    layout="inline"
+                    onFinish={async (values: { groupCode: string }) => {
+                      await api.createGroupJoinRequest(apiClient, { groupCode: values.groupCode.trim() });
+                      message.success("入群申请已发送");
+                    }}
+                  >
+                    <Form.Item name="groupCode" rules={[{ required: true, message: "请输入群号" }]}>
+                      <Input placeholder="输入 10 位群号" maxLength={10} />
+                    </Form.Item>
+                    <Button htmlType="submit">申请加入</Button>
+                  </Form>
+                  <List
+                    locale={{ emptyText: <Empty description="暂无群聊" /> }}
+                    dataSource={groups}
+                    renderItem={(group) => (
+                      <List.Item
+                        actions={[
+                          <Button
+                            key="chat"
+                            type="primary"
+                            icon={<MessageOutlined />}
+                            onClick={() => navigate(`/groups/${group.id}`)}
+                          >
+                            进入
+                          </Button>
+                        ]}
+                      >
+                        <List.Item.Meta
+                          title={
+                            <Badge dot={unreadConversationKeys.includes(`group:${group.id}`)}>
+                              {group.name}
+                            </Badge>
+                          }
+                          description={`群号 ${group.code} · ${group.members.length} 位成员`}
+                        />
+                      </List.Item>
+                    )}
+                  />
+                </Space>
               )
             },
             {
               key: "invites",
-              label: `群邀请 ${invites.length}`,
+              label: <Badge dot={invites.length > 0}>群邀请 {invites.length}</Badge>,
               children: (
                 <List
                   locale={{ emptyText: <Empty description="暂无群邀请" /> }}

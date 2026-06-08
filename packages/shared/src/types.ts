@@ -44,6 +44,7 @@ export interface GroupMemberView {
 
 export interface GroupView {
   id: string;
+  code: string;
   name: string;
   ownerId: string;
   members: GroupMemberView[];
@@ -52,11 +53,20 @@ export interface GroupView {
 
 export interface GroupInviteView {
   id: string;
-  group: Pick<GroupView, "id" | "name" | "ownerId" | "createdAt">;
+  group: Pick<GroupView, "id" | "code" | "name" | "ownerId" | "createdAt">;
   inviter: SafeUser;
   invitee: SafeUser;
   encryptedGroupKey: string;
   keyVersion: number;
+  status: FriendRequestStatus;
+  createdAt: string;
+  respondedAt?: string | null;
+}
+
+export interface GroupJoinRequestView {
+  id: string;
+  group: Pick<GroupView, "id" | "code" | "name" | "ownerId" | "createdAt">;
+  applicant: SafeUser;
   status: FriendRequestStatus;
   createdAt: string;
   respondedAt?: string | null;
@@ -87,6 +97,19 @@ export interface CreateGroupInviteRequest {
   inviteeId: string;
   encryptedGroupKey: string;
   keyVersion: number;
+}
+
+export interface CreateGroupJoinRequestRequest {
+  groupCode: string;
+}
+
+export interface ApproveGroupJoinRequestRequest {
+  encryptedGroupKey: string;
+  keyVersion: number;
+}
+
+export interface UpdateGroupRequest {
+  groupName: string;
 }
 
 export interface UploadEncryptedFileResponse {

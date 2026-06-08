@@ -1,7 +1,7 @@
 import type { EncryptedMessageEnvelope, FriendView } from "@encrypted-chat/shared";
 import { SocketEvents } from "@encrypted-chat/shared";
 import { App, Empty, Space, Typography } from "antd";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { ChatComposer } from "../components/ChatComposer";
 import { MessageBubble, type RenderedMessage } from "../components/MessageBubble";
@@ -14,11 +14,12 @@ import { displayUserName } from "../utils/displayName";
 
 export function ChatPage() {
   const { friendId = "" } = useParams();
-  const { apiClient, user, privateKey, socket } = useAuth();
+  const { apiClient, user, privateKey, socket, markConversationRead } = useAuth();
   const { message } = App.useApp();
   const [friends, setFriends] = useState<FriendView[]>([]);
   const [envelopes, setEnvelopes] = useState<EncryptedMessageEnvelope[]>([]);
   const [rendered, setRendered] = useState<RenderedMessage[]>([]);
+  const messageListRef = useRef<HTMLDivElement>(null);
 
   const friend = friends.find((item) => item.id === friendId);
   const conversationKey = useMemo(() => `direct:${friendId}`, [friendId]);
@@ -32,7 +33,15 @@ export function ChatPage() {
 
   useEffect(() => {
     setEnvelopes(getLocalMessages(conversationKey));
-  }, [conversationKey]);
+    markConversationRead(conversationKey);
+  }, [conversationKey, markConversationRead]);
+
+  useEffect(() => {
+    const list = messageListRef.current;
+    if (list) {
+      list.scrollTop = list.scrollHeight;
+    }
+  }, [rendered.length]);
 
   useEffect(() => {
     if (!socket || !user) {
@@ -53,13 +62,14 @@ export function ChatPage() {
       setEnvelopes((current) =>
         current.some((item) => item.clientMessageId === envelope.clientMessageId) ? current : [...current, envelope]
       );
+      markConversationRead(conversationKey);
     };
 
     socket.on(SocketEvents.MessageNew, handleNewMessage);
     return () => {
       socket.off(SocketEvents.MessageNew, handleNewMessage);
     };
-  }, [conversationKey, friendId, socket, user]);
+  }, [conversationKey, friendId, markConversationRead, socket, user]);
 
   useEffect(() => {
     let cancelled = false;
@@ -161,7 +171,7 @@ export function ChatPage() {
         </Typography.Title>
         <Typography.Text type="secondary">{friend ? `UID ${friend.uid}` : "好友不存在或尚未加载"}</Typography.Text>
       </div>
-      <div className="message-list">
+      <div className="message-list" ref={messageListRef}>
         {rendered.length === 0 ? (
           <Empty description="暂无消息" />
         ) : (

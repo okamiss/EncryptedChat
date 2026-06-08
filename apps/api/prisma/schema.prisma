@@ -40,6 +40,7 @@ model User {
   groupMembers            GroupMember[]
   sentGroupInvites        GroupInvite[]   @relation("GroupInviteInviter")
   receivedGroupInvites    GroupInvite[]   @relation("GroupInviteInvitee")
+  groupJoinRequests       GroupJoinRequest[] @relation("GroupJoinRequestApplicant")
   encryptedFiles          EncryptedFile[] @relation("EncryptedFileOwner")
   directFilesReceived     EncryptedFile[] @relation("EncryptedFileTargetUser")
 
@@ -78,6 +79,7 @@ model Friendship {
 
 model Group {
   id        String   @id @default(uuid()) @db.Uuid
+  code      String   @unique @db.VarChar(10)
   name      String   @db.VarChar(80)
   ownerId   String   @map("owner_id") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at")
@@ -85,6 +87,7 @@ model Group {
   owner   User          @relation("GroupOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   members GroupMember[]
   invites GroupInvite[]
+  joinRequests GroupJoinRequest[]
   files   EncryptedFile[]
 
   @@map("groups")
@@ -124,6 +127,22 @@ model GroupInvite {
   @@unique([groupId, inviteeId, status])
   @@index([inviteeId, status])
   @@map("group_invites")
+}
+
+model GroupJoinRequest {
+  id          String              @id @default(uuid()) @db.Uuid
+  groupId     String              @map("group_id") @db.Uuid
+  applicantId String              @map("applicant_id") @db.Uuid
+  status      FriendRequestStatus @default(pending)
+  createdAt   DateTime            @default(now()) @map("created_at")
+  respondedAt DateTime?           @map("responded_at")
+
+  group     Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  applicant User  @relation("GroupJoinRequestApplicant", fields: [applicantId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, applicantId, status])
+  @@index([applicantId, status])
+  @@map("group_join_requests")
 }
 
 model EncryptedFile {

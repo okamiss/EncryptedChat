@@ -1,15 +1,19 @@
 import type {
   AuthResponse,
+  ApproveGroupJoinRequestRequest,
   CreateFriendRequestRequest,
   CreateGroupInviteRequest,
+  CreateGroupJoinRequestRequest,
   CreateGroupRequest,
   FriendRequestView,
   FriendView,
   GroupInviteView,
+  GroupJoinRequestView,
   GroupView,
   LoginRequest,
   RegisterRequest,
   SafeUser,
+  UpdateGroupRequest,
   UploadEncryptedFileResponse
 } from "@encrypted-chat/shared";
 
@@ -88,8 +92,28 @@ export function getGroup(client: ApiClient, id: string) {
   return request<GroupView>(`/groups/${id}`, { client });
 }
 
+export function updateGroup(client: ApiClient, id: string, body: UpdateGroupRequest) {
+  return request<GroupView>(`/groups/${id}`, { method: "PATCH", body, client });
+}
+
 export function createGroupInvite(client: ApiClient, groupId: string, body: CreateGroupInviteRequest) {
   return request<GroupInviteView>(`/groups/${groupId}/invites`, { method: "POST", body, client });
+}
+
+export function listGroupJoinRequests(client: ApiClient, groupId: string) {
+  return request<GroupJoinRequestView[]>(`/groups/${groupId}/join-requests`, { client });
+}
+
+export function createGroupJoinRequest(client: ApiClient, body: CreateGroupJoinRequestRequest) {
+  return request<GroupJoinRequestView>("/group-join-requests", { method: "POST", body, client });
+}
+
+export function approveGroupJoinRequest(client: ApiClient, id: string, body: ApproveGroupJoinRequestRequest) {
+  return request<GroupJoinRequestView>(`/group-join-requests/${id}/approve`, { method: "POST", body, client });
+}
+
+export function rejectGroupJoinRequest(client: ApiClient, id: string) {
+  return request<GroupJoinRequestView>(`/group-join-requests/${id}/reject`, { method: "POST", client });
 }
 
 export function listGroupInvites(client: ApiClient) {

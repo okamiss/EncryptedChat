@@ -1,7 +1,8 @@
-import type { EncryptedMessageEnvelope, FriendView, GroupView } from "@encrypted-chat/shared";
+import { CheckOutlined, EditOutlined, StopOutlined, TeamOutlined, UserAddOutlined } from "@ant-design/icons";
+import type { EncryptedMessageEnvelope, FriendView, GroupJoinRequestView, GroupView } from "@encrypted-chat/shared";
 import { SocketEvents } from "@encrypted-chat/shared";
-import { App, Button, Empty, Select, Space, Typography } from "antd";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { App, Button, Empty, Input, List, Modal, Select, Space, Typography } from "antd";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { ChatComposer } from "../components/ChatComposer";
 import { MessageBubble, type RenderedMessage } from "../components/MessageBubble";
@@ -20,7 +21,7 @@ import { displayUserName } from "../utils/displayName";
 
 export function GroupChatPage() {
   const { groupId = "" } = useParams();
-  const { apiClient, user, privateKey, socket } = useAuth();
+  const { apiClient, user, privateKey, socket, markConversationRead } = useAuth();
   const { message } = App.useApp();
   const [group, setGroup] = useState<GroupView | undefined>();
   const [friends, setFriends] = useState<FriendView[]>([]);
@@ -28,10 +29,18 @@ export function GroupChatPage() {
   const [groupKey, setGroupKey] = useState<CryptoKey | undefined>();
   const [envelopes, setEnvelopes] = useState<EncryptedMessageEnvelope[]>([]);
   const [rendered, setRendered] = useState<RenderedMessage[]>([]);
+  const [membersOpen, setMembersOpen] = useState(false);
+  const [joinRequestsOpen, setJoinRequestsOpen] = useState(false);
+  const [joinRequests, setJoinRequests] = useState<GroupJoinRequestView[]>([]);
+  const [renaming, setRenaming] = useState(false);
+  const [groupNameDraft, setGroupNameDraft] = useState("");
+  const messageListRef = useRef<HTMLDivElement>(null);
 
   const conversationKey = useMemo(() => `group:${groupId}`, [groupId]);
   const myMembership = group?.members.find((member) => member.user.id === user?.id);
   const keyVersion = myMembership?.keyVersion ?? 1;
+  const isOwner = group?.ownerId === user?.id;
+  const friendIds = useMemo(() => new Set(friends.map((friend) => friend.id)), [friends]);
 
   const load = useCallback(async () => {
     const [nextGroup, nextFriends] = await Promise.all([api.getGroup(apiClient, groupId), api.listFriends(apiClient)]);
@@ -39,13 +48,36 @@ export function GroupChatPage() {
     setFriends(nextFriends);
   }, [apiClient, groupId]);
 
+  const loadJoinRequests = useCallback(async () => {
+    const requests = await api.listGroupJoinRequests(apiClient, groupId);
+    setJoinRequests(requests);
+  }, [apiClient, groupId]);
+
   useEffect(() => {
     void load().catch((error) => message.error(error instanceof Error ? error.message : "加载群聊失败"));
   }, [load, message]);
 
   useEffect(() => {
+    if (isOwner) {
+      void loadJoinRequests().catch((error) =>
+        message.error(error instanceof Error ? error.message : "加载入群申请失败")
+      );
+    } else {
+      setJoinRequests([]);
+    }
+  }, [isOwner, loadJoinRequests, message]);
+
+  useEffect(() => {
     setEnvelopes(getLocalMessages(conversationKey));
-  }, [conversationKey]);
+    markConversationRead(conversationKey);
+  }, [conversationKey, markConversationRead]);
+
+  useEffect(() => {
+    const list = messageListRef.current;
+    if (list) {
+      list.scrollTop = list.scrollHeight;
+    }
+  }, [rendered.length]);
 
   useEffect(() => {
     if (!privateKey || !myMembership) {
@@ -73,9 +105,13 @@ export function GroupChatPage() {
       setEnvelopes((current) =>
         current.some((item) => item.clientMessageId === envelope.clientMessageId) ? current : [...current, envelope]
       );
+      markConversationRead(conversationKey);
     };
     const handleGroupUpdated = () => {
       void load();
+      if (isOwner) {
+        void loadJoinRequests();
+      }
     };
 
     socket.on(SocketEvents.MessageNew, handleNewMessage);
@@ -84,7 +120,7 @@ export function GroupChatPage() {
       socket.off(SocketEvents.MessageNew, handleNewMessage);
       socket.off(SocketEvents.GroupUpdated, handleGroupUpdated);
     };
-  }, [conversationKey, groupId, load, socket, user]);
+  }, [conversationKey, groupId, isOwner, load, loadJoinRequests, markConversationRead, socket, user]);
 
   useEffect(() => {
     let cancelled = false;
@@ -193,9 +229,30 @@ export function GroupChatPage() {
             <Typography.Title level={3} style={{ margin: 0 }}>
               {group?.name ?? "群聊"}
             </Typography.Title>
-            <Typography.Text type="secondary">{group ? `${group.members.length} 位成员` : "正在加载"}</Typography.Text>
+            <Typography.Text type="secondary">
+              {group ? `群号 ${group.code} · ${group.members.length} 位成员` : "正在加载"}
+            </Typography.Text>
           </div>
           <Space>
+            {isOwner && (
+              <Button
+                icon={<EditOutlined />}
+                onClick={() => {
+                  setGroupNameDraft(group?.name ?? "");
+                  setRenaming(true);
+                }}
+              >
+                改名
+              </Button>
+            )}
+            <Button icon={<TeamOutlined />} onClick={() => setMembersOpen(true)}>
+              成员
+            </Button>
+            {isOwner && (
+              <Button icon={<UserAddOutlined />} onClick={() => setJoinRequestsOpen(true)}>
+                申请 {joinRequests.length}
+              </Button>
+            )}
             <Select
               style={{ width: 240 }}
               placeholder="选择好友入群"
@@ -226,7 +283,7 @@ export function GroupChatPage() {
           </Space>
         </Space>
       </div>
-      <div className="message-list">
+      <div className="message-list" ref={messageListRef}>
         {rendered.length === 0 ? (
           <Empty description="暂无消息" />
         ) : (
@@ -254,6 +311,109 @@ export function GroupChatPage() {
           }
         }}
       />
+      <Modal
+        title="修改群名称"
+        open={renaming}
+        okText="保存"
+        cancelText="取消"
+        onCancel={() => setRenaming(false)}
+        onOk={async () => {
+          if (!group) {
+            return;
+          }
+          const nextGroup = await api.updateGroup(apiClient, group.id, { groupName: groupNameDraft });
+          setGroup(nextGroup);
+          setRenaming(false);
+          message.success("群名称已更新");
+        }}
+      >
+        <Input value={groupNameDraft} maxLength={80} onChange={(event) => setGroupNameDraft(event.target.value)} />
+      </Modal>
+      <Modal title="群成员" open={membersOpen} footer={null} onCancel={() => setMembersOpen(false)}>
+        <List
+          dataSource={group?.members ?? []}
+          locale={{ emptyText: <Empty description="暂无成员" /> }}
+          renderItem={(member) => {
+            const canAddFriend = member.user.id !== user?.id && !friendIds.has(member.user.id);
+            return (
+              <List.Item
+                actions={
+                  canAddFriend
+                    ? [
+                        <Button
+                          key="add"
+                          icon={<UserAddOutlined />}
+                          onClick={async () => {
+                            await api.createFriendRequest(apiClient, { addresseeUid: member.user.uid });
+                            message.success("好友申请已发送");
+                          }}
+                        >
+                          加好友
+                        </Button>
+                      ]
+                    : []
+                }
+              >
+                <List.Item.Meta
+                  title={displayUserName(member.user)}
+                  description={`${member.role === "owner" ? "群主" : "成员"} · ${member.user.username} · UID ${
+                    member.user.uid
+                  }`}
+                />
+              </List.Item>
+            );
+          }}
+        />
+      </Modal>
+      <Modal title="入群申请" open={joinRequestsOpen} footer={null} onCancel={() => setJoinRequestsOpen(false)}>
+        <List
+          dataSource={joinRequests}
+          locale={{ emptyText: <Empty description="暂无入群申请" /> }}
+          renderItem={(request) => (
+            <List.Item
+              actions={[
+                <Button
+                  key="approve"
+                  type="primary"
+                  icon={<CheckOutlined />}
+                  disabled={!groupKey}
+                  onClick={async () => {
+                    if (!groupKey) {
+                      return;
+                    }
+                    const encryptedGroupKey = await wrapGroupKeyForUser(groupKey, request.applicant.publicKey);
+                    await api.approveGroupJoinRequest(apiClient, request.id, {
+                      encryptedGroupKey,
+                      keyVersion
+                    });
+                    message.success("已同意入群申请");
+                    await Promise.all([load(), loadJoinRequests()]);
+                  }}
+                >
+                  同意
+                </Button>,
+                <Button
+                  key="reject"
+                  danger
+                  icon={<StopOutlined />}
+                  onClick={async () => {
+                    await api.rejectGroupJoinRequest(apiClient, request.id);
+                    message.success("已拒绝入群申请");
+                    await loadJoinRequests();
+                  }}
+                >
+                  拒绝
+                </Button>
+              ]}
+            >
+              <List.Item.Meta
+                title={displayUserName(request.applicant)}
+                description={`${request.applicant.username} · UID ${request.applicant.uid}`}
+              />
+            </List.Item>
+          )}
+        />
+      </Modal>
     </section>
   );
 }

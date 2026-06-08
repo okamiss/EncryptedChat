@@ -1,8 +1,14 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { CurrentUser } from "../../common/current-user.decorator";
 import type { AuthenticatedUser } from "../../common/authenticated-user";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
-import { CreateGroupDto, CreateGroupInviteDto } from "./dto/groups.dto";
+import {
+  ApproveGroupJoinRequestDto,
+  CreateGroupDto,
+  CreateGroupInviteDto,
+  CreateGroupJoinRequestDto,
+  UpdateGroupDto
+} from "./dto/groups.dto";
 import { GroupsService } from "./groups.service";
 
 @UseGuards(JwtAuthGuard)
@@ -25,9 +31,38 @@ export class GroupsController {
     return this.groupsService.get(user.id, id);
   }
 
+  @Patch("groups/:id")
+  update(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string, @Body() body: UpdateGroupDto) {
+    return this.groupsService.updateName(user.id, id, body.groupName);
+  }
+
   @Post("groups/:id/invites")
   invite(@CurrentUser() user: AuthenticatedUser, @Param("id") groupId: string, @Body() body: CreateGroupInviteDto) {
     return this.groupsService.invite(user.id, groupId, body.inviteeId, body.encryptedGroupKey, body.keyVersion);
+  }
+
+  @Get("groups/:id/join-requests")
+  joinRequests(@CurrentUser() user: AuthenticatedUser, @Param("id") groupId: string) {
+    return this.groupsService.listJoinRequests(user.id, groupId);
+  }
+
+  @Post("group-join-requests")
+  requestJoin(@CurrentUser() user: AuthenticatedUser, @Body() body: CreateGroupJoinRequestDto) {
+    return this.groupsService.requestJoin(user.id, body.groupCode);
+  }
+
+  @Post("group-join-requests/:id/approve")
+  approveJoinRequest(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id") id: string,
+    @Body() body: ApproveGroupJoinRequestDto
+  ) {
+    return this.groupsService.approveJoinRequest(user.id, id, body.encryptedGroupKey, body.keyVersion);
+  }
+
+  @Post("group-join-requests/:id/reject")
+  rejectJoinRequest(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
+    return this.groupsService.rejectJoinRequest(user.id, id);
   }
 
   @Get("group-invites")
