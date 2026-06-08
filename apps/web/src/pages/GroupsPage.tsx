@@ -8,11 +8,14 @@ import { useAuth } from "../state/AuthContext";
 import * as api from "../services/api";
 
 export function GroupsPage() {
-  const { apiClient, socket, unreadConversationKeys } = useAuth();
+  const { apiClient, socket, unreadConversationCounts } = useAuth();
   const { message } = App.useApp();
   const navigate = useNavigate();
   const [groups, setGroups] = useState<GroupView[]>([]);
   const [invites, setInvites] = useState<GroupInviteView[]>([]);
+  const groupUnreadCount = Object.entries(unreadConversationCounts)
+    .filter(([key]) => key.startsWith("group:"))
+    .reduce((total, [, count]) => total + count, 0);
 
   const load = useCallback(async () => {
     const [groupList, groupInvites] = await Promise.all([api.listGroups(apiClient), api.listGroupInvites(apiClient)]);
@@ -31,8 +34,10 @@ export function GroupsPage() {
     const handleGroupUpdated = () => {
       void load();
     };
+    socket.on(SocketEvents.GroupInvite, handleGroupUpdated);
     socket.on(SocketEvents.GroupUpdated, handleGroupUpdated);
     return () => {
+      socket.off(SocketEvents.GroupInvite, handleGroupUpdated);
       socket.off(SocketEvents.GroupUpdated, handleGroupUpdated);
     };
   }, [load, socket]);
@@ -57,7 +62,7 @@ export function GroupsPage() {
           items={[
             {
               key: "groups",
-              label: <Badge dot={unreadConversationKeys.some((key) => key.startsWith("group:"))}>我的群聊 {groups.length}</Badge>,
+              label: <Badge count={groupUnreadCount} overflowCount={99}>我的群聊 {groups.length}</Badge>,
               children: (
                 <Space direction="vertical" size={16} style={{ width: "100%" }}>
                   <Form
@@ -90,7 +95,7 @@ export function GroupsPage() {
                       >
                         <List.Item.Meta
                           title={
-                            <Badge dot={unreadConversationKeys.includes(`group:${group.id}`)}>
+                            <Badge count={unreadConversationCounts[`group:${group.id}`] ?? 0} overflowCount={99}>
                               {group.name}
                             </Badge>
                           }
@@ -104,7 +109,7 @@ export function GroupsPage() {
             },
             {
               key: "invites",
-              label: <Badge dot={invites.length > 0}>群邀请 {invites.length}</Badge>,
+              label: <Badge count={invites.length} overflowCount={99}>群邀请 {invites.length}</Badge>,
               children: (
                 <List
                   locale={{ emptyText: <Empty description="暂无群邀请" /> }}

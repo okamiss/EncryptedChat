@@ -8,10 +8,10 @@ import { displayUserName } from "../utils/displayName";
 interface ConversationListProps {
   friends: FriendView[];
   groups: GroupView[];
-  unreadConversationKeys: string[];
+  unreadConversationCounts: Record<string, number>;
 }
 
-export function ConversationList({ friends, groups, unreadConversationKeys }: ConversationListProps) {
+export function ConversationList({ friends, groups, unreadConversationCounts }: ConversationListProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const [query, setQuery] = useState("");
@@ -72,7 +72,7 @@ export function ConversationList({ friends, groups, unreadConversationKeys }: Co
                 <span className="conversation-title">{item.title}</span>
                 <span className="conversation-description">{item.description}</span>
               </span>
-              <Badge dot={unreadConversationKeys.includes(item.key)} />
+              <Badge count={unreadConversationCounts[item.key] ?? 0} overflowCount={99} />
             </button>
           ))
         )}

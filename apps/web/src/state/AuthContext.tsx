@@ -24,7 +24,7 @@ import { getPrivateKeyRecord, savePrivateKeyRecord } from "../storage/privateKey
 import {
   addUnreadConversation,
   clearUnreadConversation,
-  getUnreadConversations
+  getUnreadConversationCounts
 } from "../storage/unreadConversations";
 
 type PrivateKeyStatus = "locked" | "ready" | "missing";
@@ -37,6 +37,7 @@ interface AuthContextValue {
   socket?: Socket;
   apiClient: api.ApiClient;
   unreadConversationKeys: string[];
+  unreadConversationCounts: Record<string, number>;
   register: (username: string, password: string) => Promise<void>;
   login: (username: string, password: string) => Promise<void>;
   unlockPrivateKey: (password: string) => Promise<void>;
@@ -62,9 +63,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [privateKey, setPrivateKey] = useState<CryptoKey | undefined>();
   const [privateKeyStatus, setPrivateKeyStatus] = useState<PrivateKeyStatus>("locked");
   const [socket, setSocket] = useState<Socket | undefined>();
-  const [unreadConversationKeys, setUnreadConversationKeys] = useState<string[]>([]);
+  const [unreadConversationCounts, setUnreadConversationCounts] = useState<Record<string, number>>({});
 
   const apiClient = useMemo(() => ({ token }), [token]);
+  const unreadConversationKeys = useMemo(() => Object.keys(unreadConversationCounts), [unreadConversationCounts]);
 
   const storeSession = useCallback((auth: AuthResponse) => {
     setToken(auth.accessToken);
@@ -173,7 +175,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!user) {
         return;
       }
-      setUnreadConversationKeys(clearUnreadConversation(user.id, conversationKey));
+      setUnreadConversationCounts(clearUnreadConversation(user.id, conversationKey));
     },
     [user]
   );
@@ -185,13 +187,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(undefined);
     setPrivateKey(undefined);
     setPrivateKeyStatus("locked");
-    setUnreadConversationKeys([]);
+    setUnreadConversationCounts({});
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
   }, [socket]);
 
   useEffect(() => {
-    setUnreadConversationKeys(user ? getUnreadConversations(user.id) : []);
+    setUnreadConversationCounts(user ? getUnreadConversationCounts(user.id) : {});
   }, [user]);
 
   useEffect(() => {
@@ -206,7 +208,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (cancelled) {
           return;
         }
-        let nextUnread = getUnreadConversations(user.id);
+        let nextUnread = getUnreadConversationCounts(user.id);
         for (const envelope of messages) {
           const key = conversationKeyForEnvelope(envelope, user.id);
           const isNew = !hasLocalMessage(key, envelope.clientMessageId);
@@ -215,7 +217,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             nextUnread = addUnreadConversation(user.id, key);
           }
         }
-        setUnreadConversationKeys(nextUnread);
+        setUnreadConversationCounts(nextUnread);
       })
       .catch(() => {
         message.warning("离线消息同步失败，稍后会在重新登录时再尝试。");
@@ -238,7 +240,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const key = conversationKeyForEnvelope(envelope, user.id);
       appendLocalMessage(key, envelope);
       if (envelope.fromUserId !== user.id) {
-        setUnreadConversationKeys(addUnreadConversation(user.id, key));
+        setUnreadConversationCounts(addUnreadConversation(user.id, key));
       }
     };
     const handleMessageRecalled = (payload: MessageRecallPayload) => {
@@ -269,6 +271,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         socket,
         apiClient,
         unreadConversationKeys,
+        unreadConversationCounts,
         register,
         login,
         unlockPrivateKey,

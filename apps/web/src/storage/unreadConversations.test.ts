@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   addUnreadConversation,
   clearUnreadConversation,
+  getUnreadConversationCounts,
   getUnreadConversations
 } from "./unreadConversations";
 
@@ -18,6 +19,17 @@ describe("unreadConversations", () => {
     addUnreadConversation(userId, "group:group-1");
 
     expect(getUnreadConversations(userId)).toEqual(["direct:user-2", "group:group-1"]);
+  });
+
+  it("counts repeated unread messages per conversation", () => {
+    addUnreadConversation(userId, "direct:user-2");
+    addUnreadConversation(userId, "direct:user-2");
+    addUnreadConversation(userId, "group:group-1");
+
+    expect(getUnreadConversationCounts(userId)).toEqual({
+      "direct:user-2": 2,
+      "group:group-1": 1
+    });
   });
 
   it("clears a read conversation without touching the rest", () => {

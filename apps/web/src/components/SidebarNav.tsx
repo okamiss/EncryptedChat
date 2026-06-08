@@ -5,7 +5,7 @@ import {
   TeamOutlined,
   UserOutlined
 } from "@ant-design/icons";
-import { Avatar, Badge, Button, Tooltip } from "antd";
+import { Avatar, Badge, Button, Popconfirm, Tooltip } from "antd";
 import type { ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { SafeUser } from "@encrypted-chat/shared";
@@ -13,8 +13,10 @@ import { ThemeModeButton } from "./ThemeModeButton";
 
 interface SidebarNavProps {
   user?: SafeUser;
-  hasDirectUnread: boolean;
-  hasGroupUnread: boolean;
+  directUnreadCount: number;
+  friendRequestCount: number;
+  groupUnreadCount: number;
+  groupNoticeCount: number;
   onLogout: () => void;
 }
 
@@ -32,9 +34,18 @@ const navItems: NavItem[] = [
   { path: "/profile", label: "个人信息", icon: <UserOutlined /> }
 ] as const;
 
-export function SidebarNav({ user, hasDirectUnread, hasGroupUnread, onLogout }: SidebarNavProps) {
+export function SidebarNav({
+  user,
+  directUnreadCount,
+  friendRequestCount,
+  groupUnreadCount,
+  groupNoticeCount,
+  onLogout
+}: SidebarNavProps) {
   const navigate = useNavigate();
   const location = useLocation();
+  const directNavCount = directUnreadCount + friendRequestCount;
+  const groupNavCount = groupUnreadCount + groupNoticeCount;
 
   return (
     <aside className="sidebar-nav" aria-label="主导航">
@@ -44,7 +55,7 @@ export function SidebarNav({ user, hasDirectUnread, hasGroupUnread, onLogout }: 
       <nav className="sidebar-nav-items">
         {navItems.map((item) => {
           const active = selectedKey(location.pathname) === item.path;
-          const unread = item.unread === "direct" ? hasDirectUnread : item.unread === "group" ? hasGroupUnread : false;
+          const unreadCount = item.unread === "direct" ? directNavCount : item.unread === "group" ? groupNavCount : 0;
           return (
             <Tooltip key={item.path} title={item.label} placement="right">
               <button
@@ -53,7 +64,7 @@ export function SidebarNav({ user, hasDirectUnread, hasGroupUnread, onLogout }: 
                 onClick={() => navigate(item.path)}
                 aria-label={item.label}
               >
-                <Badge dot={unread} offset={[2, 1]}>
+                <Badge count={unreadCount} overflowCount={99} offset={[2, 1]}>
                   {item.icon}
                 </Badge>
               </button>
@@ -68,9 +79,18 @@ export function SidebarNav({ user, hasDirectUnread, hasGroupUnread, onLogout }: 
             {(user?.username ?? "U").slice(0, 1).toUpperCase()}
           </Avatar>
         </Tooltip>
-        <Tooltip title="退出登录" placement="right">
-          <Button aria-label="退出登录" type="text" icon={<LogoutOutlined />} onClick={onLogout} />
-        </Tooltip>
+        <Popconfirm
+          title="退出登录"
+          description="确认退出当前账号？"
+          okText="退出"
+          okButtonProps={{ danger: true }}
+          cancelText="取消"
+          onConfirm={onLogout}
+        >
+          <Tooltip title="退出登录" placement="right">
+            <Button aria-label="退出登录" type="text" icon={<LogoutOutlined />} />
+          </Tooltip>
+        </Popconfirm>
       </div>
     </aside>
   );

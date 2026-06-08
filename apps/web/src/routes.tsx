@@ -49,12 +49,14 @@ function ProtectedRoute() {
 }
 
 function AppLayout() {
-  const { apiClient, user, privateKeyStatus, logout, socket, unreadConversationKeys } = useAuth();
+  const { apiClient, user, privateKeyStatus, logout, socket, unreadConversationCounts } = useAuth();
   const location = useLocation();
   const [friends, setFriends] = useState<FriendView[]>([]);
   const [groups, setGroups] = useState<GroupView[]>([]);
-  const hasDirectUnread = unreadConversationKeys.some((key) => key.startsWith("direct:"));
-  const hasGroupUnread = unreadConversationKeys.some((key) => key.startsWith("group:"));
+  const [friendRequestCount, setFriendRequestCount] = useState(0);
+  const [groupInviteCount, setGroupInviteCount] = useState(0);
+  const directUnreadCount = countUnreadByPrefix(unreadConversationCounts, "direct:");
+  const groupUnreadCount = countUnreadByPrefix(unreadConversationCounts, "group:");
   const isChatRoute = location.pathname.startsWith("/chats/") || location.pathname.startsWith("/groups/");
   const isListRoute = location.pathname === "/friends" || location.pathname === "/groups";
   const shellClassName = [
@@ -67,12 +69,21 @@ function AppLayout() {
 
   const loadConversations = useCallback(async () => {
     try {
-      const [nextFriends, nextGroups] = await Promise.all([api.listFriends(apiClient), api.listGroups(apiClient)]);
+      const [nextFriends, nextGroups, incomingRequests, groupInvites] = await Promise.all([
+        api.listFriends(apiClient),
+        api.listGroups(apiClient),
+        api.listIncomingFriendRequests(apiClient),
+        api.listGroupInvites(apiClient)
+      ]);
       setFriends(nextFriends);
       setGroups(nextGroups);
+      setFriendRequestCount(incomingRequests.length);
+      setGroupInviteCount(groupInvites.length);
     } catch {
       setFriends([]);
       setGroups([]);
+      setFriendRequestCount(0);
+      setGroupInviteCount(0);
     }
   }, [apiClient]);
 
@@ -87,10 +98,14 @@ function AppLayout() {
     const reload = () => {
       void loadConversations();
     };
+    socket.on(SocketEvents.FriendRequest, reload);
     socket.on(SocketEvents.FriendUpdated, reload);
+    socket.on(SocketEvents.GroupInvite, reload);
     socket.on(SocketEvents.GroupUpdated, reload);
     return () => {
+      socket.off(SocketEvents.FriendRequest, reload);
       socket.off(SocketEvents.FriendUpdated, reload);
+      socket.off(SocketEvents.GroupInvite, reload);
       socket.off(SocketEvents.GroupUpdated, reload);
     };
   }, [loadConversations, socket]);
@@ -99,11 +114,13 @@ function AppLayout() {
     <div className={shellClassName}>
       <SidebarNav
         user={user}
-        hasDirectUnread={hasDirectUnread}
-        hasGroupUnread={hasGroupUnread}
+        directUnreadCount={directUnreadCount}
+        friendRequestCount={friendRequestCount}
+        groupUnreadCount={groupUnreadCount}
+        groupNoticeCount={groupInviteCount}
         onLogout={logout}
       />
-      <ConversationList friends={friends} groups={groups} unreadConversationKeys={unreadConversationKeys} />
+      <ConversationList friends={friends} groups={groups} unreadConversationCounts={unreadConversationCounts} />
       <main className="app-content">
         {privateKeyStatus !== "ready" && (
           <Alert
@@ -118,4 +135,10 @@ function AppLayout() {
       </main>
     </div>
   );
+}
+
+function countUnreadByPrefix(counts: Record<string, number>, prefix: string): number {
+  return Object.entries(counts)
+    .filter(([key]) => key.startsWith(prefix))
+    .reduce((total, [, count]) => total + count, 0);
 }

@@ -17,7 +17,7 @@ import type {
   MessageRecallPayload
 } from "@encrypted-chat/shared";
 import { SocketEvents } from "@encrypted-chat/shared";
-import { App, Button, Empty, Input, List, Modal, Select, Space } from "antd";
+import { App, Badge, Button, Empty, Input, List, Modal, Select, Space } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ChatHeader } from "../components/ChatHeader";
@@ -346,9 +346,11 @@ export function GroupChatPage() {
         成员
       </Button>
       {canManageJoinRequests && (
-        <Button icon={<UserAddOutlined />} onClick={() => setJoinRequestsOpen(true)}>
-          申请 {joinRequests.length}
-        </Button>
+        <Badge count={joinRequests.length} overflowCount={99}>
+          <Button icon={<UserAddOutlined />} onClick={() => setJoinRequestsOpen(true)}>
+            申请
+          </Button>
+        </Badge>
       )}
       <Select
         className="group-invite-select"

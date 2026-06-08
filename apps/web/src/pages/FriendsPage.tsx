@@ -9,12 +9,15 @@ import * as api from "../services/api";
 import { displayUserName } from "../utils/displayName";
 
 export function FriendsPage() {
-  const { apiClient, socket, unreadConversationKeys } = useAuth();
+  const { apiClient, socket, unreadConversationCounts } = useAuth();
   const { message, modal } = App.useApp();
   const navigate = useNavigate();
   const [friends, setFriends] = useState<FriendView[]>([]);
   const [incoming, setIncoming] = useState<FriendRequestView[]>([]);
   const [outgoing, setOutgoing] = useState<FriendRequestView[]>([]);
+  const directUnreadCount = Object.entries(unreadConversationCounts)
+    .filter(([key]) => key.startsWith("direct:"))
+    .reduce((total, [, count]) => total + count, 0);
 
   const load = useCallback(async () => {
     const [friendList, incomingRequests, outgoingRequests] = await Promise.all([
@@ -38,8 +41,10 @@ export function FriendsPage() {
     const handleFriendUpdated = () => {
       void load();
     };
+    socket.on(SocketEvents.FriendRequest, handleFriendUpdated);
     socket.on(SocketEvents.FriendUpdated, handleFriendUpdated);
     return () => {
+      socket.off(SocketEvents.FriendRequest, handleFriendUpdated);
       socket.off(SocketEvents.FriendUpdated, handleFriendUpdated);
     };
   }, [load, socket]);
@@ -64,7 +69,7 @@ export function FriendsPage() {
           items={[
             {
               key: "friends",
-              label: <Badge dot={unreadConversationKeys.some((key) => key.startsWith("direct:"))}>好友列表 {friends.length}</Badge>,
+              label: <Badge count={directUnreadCount} overflowCount={99}>好友列表 {friends.length}</Badge>,
               children: (
                 <List
                   locale={{ emptyText: <Empty description="暂无好友" /> }}
@@ -105,7 +110,7 @@ export function FriendsPage() {
                     >
                       <List.Item.Meta
                         title={
-                          <Badge dot={unreadConversationKeys.includes(`direct:${friend.id}`)}>
+                          <Badge count={unreadConversationCounts[`direct:${friend.id}`] ?? 0} overflowCount={99}>
                             {displayUserName(friend)}
                           </Badge>
                         }
@@ -118,7 +123,7 @@ export function FriendsPage() {
             },
             {
               key: "incoming",
-              label: `收到申请 ${incoming.length}`,
+              label: <Badge count={incoming.length} overflowCount={99}>收到申请 {incoming.length}</Badge>,
               children: (
                 <List
                   locale={{ emptyText: <Empty description="暂无收到的申请" /> }}
