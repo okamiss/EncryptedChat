@@ -1,6 +1,6 @@
 import { PictureOutlined, SendOutlined, SmileOutlined } from "@ant-design/icons";
 import { Button, Input, Popover, Space, Upload, type InputRef } from "antd";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ClipboardEvent } from "react";
 
 export type ComposerInsertRequest =
   | { id: string; type: "quote"; senderName: string; text: string }
@@ -13,7 +13,38 @@ interface ChatComposerProps {
   onSendImage: (file: File) => Promise<void>;
 }
 
-const SYSTEM_EMOJIS = ["😊", "😂", "😍", "👍", "🙏", "🎉", "❤️", "🔥", "😎", "😭", "🤔", "👌"];
+const SYSTEM_EMOJIS = [
+  "😊",
+  "😂",
+  "🤣",
+  "😍",
+  "🥰",
+  "😘",
+  "😎",
+  "🤔",
+  "😭",
+  "😡",
+  "👍",
+  "👎",
+  "👏",
+  "🙏",
+  "👌",
+  "💪",
+  "🎉",
+  "🔥",
+  "❤️",
+  "💔",
+  "✨",
+  "⭐",
+  "🌹",
+  "🍻",
+  "☕",
+  "🍰",
+  "😂",
+  "😅",
+  "😴",
+  "🙄"
+];
 
 export function ChatComposer({ disabled, insertRequest, onSendText, onSendImage }: ChatComposerProps) {
   const inputRef = useRef<InputRef>(null);
@@ -47,6 +78,25 @@ export function ChatComposer({ disabled, insertRequest, onSendText, onSendImage 
     focusInput();
   };
 
+  const sendImageFile = (file: File) => {
+    void onSendImage(file).finally(focusInput);
+  };
+
+  const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    if (disabled || sending) {
+      return;
+    }
+    const imageItem = Array.from(event.clipboardData.items).find(
+      (item) => item.kind === "file" && item.type.startsWith("image/")
+    );
+    const file = imageItem?.getAsFile();
+    if (!file) {
+      return;
+    }
+    event.preventDefault();
+    sendImageFile(file);
+  };
+
   useEffect(() => {
     if (!insertRequest) {
       return;
@@ -67,10 +117,11 @@ export function ChatComposer({ disabled, insertRequest, onSendText, onSendImage 
         <Input.TextArea
           ref={inputRef}
           value={text}
-          autoSize={{ minRows: 5, maxRows: 5 }}
+          autoSize={{ minRows: 3, maxRows: 3 }}
           disabled={disabled || sending}
           placeholder="输入加密消息"
           onChange={(event) => setText(event.target.value)}
+          onPaste={handlePaste}
           onPressEnter={(event) => {
             if (!event.shiftKey) {
               event.preventDefault();
@@ -84,8 +135,8 @@ export function ChatComposer({ disabled, insertRequest, onSendText, onSendImage 
           onOpenChange={setEmojiOpen}
           content={
             <div className="emoji-grid">
-              {SYSTEM_EMOJIS.map((emoji) => (
-                <button key={emoji} type="button" className="emoji-option" onClick={() => insertEmoji(emoji)}>
+              {SYSTEM_EMOJIS.map((emoji, index) => (
+                <button key={`${emoji}-${index}`} type="button" className="emoji-option" onClick={() => insertEmoji(emoji)}>
                   {emoji}
                 </button>
               ))}
@@ -99,7 +150,7 @@ export function ChatComposer({ disabled, insertRequest, onSendText, onSendImage 
           showUploadList={false}
           disabled={disabled || sending}
           beforeUpload={(file) => {
-            void onSendImage(file as File);
+            sendImageFile(file as File);
             return Upload.LIST_IGNORE;
           }}
         >

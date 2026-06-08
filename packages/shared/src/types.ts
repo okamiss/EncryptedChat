@@ -157,6 +157,15 @@ export interface MessageErrorPayload {
   message: string;
 }
 
+export interface MessageRecallPayload {
+  clientMessageId: string;
+  conversationType: ConversationType;
+  toUserId?: string;
+  groupId?: string;
+  fromUserId?: string;
+  recalledAt?: string;
+}
+
 export interface PresencePayload {
   userId: string;
   online: boolean;

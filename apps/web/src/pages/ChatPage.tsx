@@ -1,4 +1,4 @@
-import type { EncryptedMessageEnvelope, FriendView } from "@encrypted-chat/shared";
+import type { EncryptedMessageEnvelope, FriendView, MessageRecallPayload } from "@encrypted-chat/shared";
 import { SocketEvents } from "@encrypted-chat/shared";
 import { App, Empty, Space, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -10,7 +10,7 @@ import { decryptDirectMessage, encryptDirectMessage, type PlainMessage } from ".
 import { useAutoScrollToBottom } from "../hooks/useAutoScrollToBottom";
 import * as api from "../services/api";
 import { useAuth } from "../state/AuthContext";
-import { appendLocalMessage, getLocalMessages } from "../storage/localMessages";
+import { appendLocalMessage, getLocalMessages, removeLocalMessage } from "../storage/localMessages";
 import { displayUserName } from "../utils/displayName";
 
 export function ChatPage() {
@@ -59,10 +59,25 @@ export function ChatPage() {
       );
       markConversationRead(conversationKey);
     };
+    const handleMessageRecalled = (payload: MessageRecallPayload) => {
+      const matches =
+        payload.conversationType === "direct" &&
+        ((payload.fromUserId === user.id && payload.toUserId === friendId) ||
+          (payload.fromUserId === friendId && payload.toUserId === user.id));
+
+      if (!matches) {
+        return;
+      }
+
+      removeLocalMessage(conversationKey, payload.clientMessageId);
+      setEnvelopes((current) => current.filter((item) => item.clientMessageId !== payload.clientMessageId));
+    };
 
     socket.on(SocketEvents.MessageNew, handleNewMessage);
+    socket.on(SocketEvents.MessageRecalled, handleMessageRecalled);
     return () => {
       socket.off(SocketEvents.MessageNew, handleNewMessage);
+      socket.off(SocketEvents.MessageRecalled, handleMessageRecalled);
     };
   }, [conversationKey, friendId, markConversationRead, socket, user]);
 
@@ -179,6 +194,22 @@ export function ChatPage() {
     });
   }, []);
 
+  const recallMessage = useCallback(
+    (message: RenderedMessage) => {
+      if (!friend || !socket) {
+        return;
+      }
+      socket.emit(SocketEvents.MessageRecall, {
+        clientMessageId: message.clientMessageId,
+        conversationType: "direct",
+        toUserId: friend.id
+      } satisfies MessageRecallPayload);
+      removeLocalMessage(conversationKey, message.clientMessageId);
+      setEnvelopes((current) => current.filter((item) => item.clientMessageId !== message.clientMessageId));
+    },
+    [conversationKey, friend, socket]
+  );
+
   return (
     <section className="surface chat-shell">
       <div className="chat-header">
@@ -198,6 +229,7 @@ export function ChatPage() {
                 message={item}
                 onMentionSender={mentionSender}
                 onQuoteMessage={quoteMessage}
+                onRecallMessage={recallMessage}
               />
             ))}
           </Space>

@@ -38,4 +38,34 @@ describe("MessageBubble", () => {
     expect(screen.queryByLabelText("引用这条消息")).toBeNull();
     expect(screen.queryByLabelText("@这个人")).toBeNull();
   });
+
+  it("shows a recall action for own messages", () => {
+    const ownMessage = { ...message, own: true };
+    const onRecallMessage = vi.fn();
+
+    render(<MessageBubble message={ownMessage} onRecallMessage={onRecallMessage} />);
+
+    fireEvent.click(screen.getByLabelText("撤回当前消息"));
+
+    expect(onRecallMessage).toHaveBeenCalledWith(ownMessage);
+    expect(screen.queryByLabelText("引用这条消息")).toBeNull();
+    expect(screen.queryByLabelText("@这个人")).toBeNull();
+  });
+
+  it("allows mentioning encrypted left-side messages while quote is disabled", () => {
+    const onMentionSender = vi.fn();
+
+    render(
+      <MessageBubble
+        message={{ ...message, status: "encrypted", text: undefined }}
+        onQuoteMessage={vi.fn()}
+        onMentionSender={onMentionSender}
+      />
+    );
+
+    expect((screen.getByLabelText("引用这条消息") as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByLabelText("@这个人"));
+
+    expect(onMentionSender).toHaveBeenCalled();
+  });
 });

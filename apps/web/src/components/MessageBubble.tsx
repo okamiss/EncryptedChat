@@ -1,4 +1,4 @@
-import { CommentOutlined, FileImageOutlined, LockOutlined, UserOutlined } from "@ant-design/icons";
+import { CommentOutlined, FileImageOutlined, LockOutlined, RollbackOutlined, UserOutlined } from "@ant-design/icons";
 import { Button, Image, Space, Tooltip, Typography } from "antd";
 
 export interface RenderedMessage {
@@ -16,13 +16,58 @@ interface MessageBubbleProps {
   message: RenderedMessage;
   onMentionSender?: (message: RenderedMessage) => void;
   onQuoteMessage?: (message: RenderedMessage) => void;
+  onRecallMessage?: (message: RenderedMessage) => void;
 }
 
-export function MessageBubble({ message, onMentionSender, onQuoteMessage }: MessageBubbleProps) {
-  const canUseActions = !message.own && message.status === "decrypted";
+export function MessageBubble({ message, onMentionSender, onQuoteMessage, onRecallMessage }: MessageBubbleProps) {
+  const canUseActions = !message.own;
+  const canQuote = message.status === "decrypted" && Boolean(message.text || message.imageName);
+  const peerActions =
+    canUseActions && (onQuoteMessage || onMentionSender) ? (
+      <div className="message-actions">
+        {onQuoteMessage && (
+          <Tooltip title={canQuote ? "引用这条消息" : "消息解密后可引用"}>
+            <Button
+              aria-label="引用这条消息"
+              size="small"
+              type="text"
+              icon={<CommentOutlined />}
+              disabled={!canQuote}
+              onClick={() => onQuoteMessage(message)}
+            />
+          </Tooltip>
+        )}
+        {onMentionSender && (
+          <Tooltip title="@这个人">
+            <Button
+              aria-label="@这个人"
+              size="small"
+              type="text"
+              icon={<UserOutlined />}
+              onClick={() => onMentionSender(message)}
+            />
+          </Tooltip>
+        )}
+      </div>
+    ) : null;
+  const ownActions =
+    message.own && onRecallMessage ? (
+      <div className="message-actions own-message-actions">
+        <Tooltip title="撤回当前消息">
+          <Button
+            aria-label="撤回当前消息"
+            size="small"
+            type="text"
+            icon={<RollbackOutlined />}
+            onClick={() => onRecallMessage(message)}
+          />
+        </Tooltip>
+      </div>
+    ) : null;
 
   return (
     <div className={`message-row ${message.own ? "own" : ""}`}>
+      {ownActions}
       <div className="message-bubble">
         <div className="message-meta">
           {message.senderName}
@@ -48,32 +93,7 @@ export function MessageBubble({ message, onMentionSender, onQuoteMessage }: Mess
           </Typography.Text>
         )}
       </div>
-      {canUseActions && (onQuoteMessage || onMentionSender) && (
-        <div className="message-actions">
-          {onQuoteMessage && (
-            <Tooltip title="引用这条消息">
-              <Button
-                aria-label="引用这条消息"
-                size="small"
-                type="text"
-                icon={<CommentOutlined />}
-                onClick={() => onQuoteMessage(message)}
-              />
-            </Tooltip>
-          )}
-          {onMentionSender && (
-            <Tooltip title="@这个人">
-              <Button
-                aria-label="@这个人"
-                size="small"
-                type="text"
-                icon={<UserOutlined />}
-                onClick={() => onMentionSender(message)}
-              />
-            </Tooltip>
-          )}
-        </div>
-      )}
+      {peerActions}
     </div>
   );
 }

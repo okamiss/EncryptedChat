@@ -212,7 +212,7 @@ body {
 }
 
 .message-bubble {
-  max-width: min(68%, 720px);
+  max-width: min(46%, 520px);
   padding: 10px 12px;
   border-radius: 8px;
   border: 1px solid var(--panel-border);
@@ -222,6 +222,7 @@ body {
 }
 
 .message-row.own .message-bubble {
+  max-width: min(58%, 620px);
   background: var(--own-bubble-bg);
   border-color: var(--own-bubble-border);
 }
@@ -238,6 +239,11 @@ body {
   gap: 2px;
   margin-left: 6px;
   padding-top: 4px;
+}
+
+.own-message-actions {
+  margin-left: 0;
+  margin-right: 6px;
 }
 
 .message-actions .ant-btn {
@@ -262,10 +268,47 @@ body {
   padding-top: 12px;
 }
 
+.composer .ant-space-compact {
+  align-items: stretch;
+}
+
+.composer .ant-space-compact > .ant-btn,
+.composer .ant-space-compact > .ant-upload-wrapper {
+  align-self: stretch;
+  flex: 0 0 76px;
+  width: 76px;
+}
+
+.composer .ant-input {
+  line-height: 1.6;
+}
+
+.composer .ant-btn {
+  height: auto !important;
+  min-height: 100%;
+  width: 76px;
+}
+
+.composer .ant-upload-wrapper,
+.composer .ant-upload,
+.composer .ant-upload-select,
+.composer .ant-upload-wrapper > .ant-upload > span {
+  display: inline-flex;
+  align-items: stretch;
+  align-self: stretch;
+  height: auto;
+}
+
+.composer .ant-upload-wrapper .ant-btn {
+  height: auto !important;
+  min-height: 100%;
+  width: 76px;
+}
+
 .emoji-grid {
-  width: 216px;
+  width: 252px;
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(7, 1fr);
   gap: 4px;
 }
 
@@ -322,6 +365,10 @@ body {
   }
 
   .message-bubble {
-    max-width: 86%;
+    max-width: 76%;
+  }
+
+  .message-row.own .message-bubble {
+    max-width: 82%;
   }
 }

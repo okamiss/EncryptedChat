@@ -1,4 +1,4 @@
-import type { AuthResponse, EncryptedMessageEnvelope, SafeUser } from "@encrypted-chat/shared";
+import type { AuthResponse, EncryptedMessageEnvelope, MessageRecallPayload, SafeUser } from "@encrypted-chat/shared";
 import { SocketEvents } from "@encrypted-chat/shared";
 import { App } from "antd";
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
@@ -12,7 +12,12 @@ import {
 } from "../crypto/keys";
 import * as api from "../services/api";
 import { createChatSocket } from "../services/socket";
-import { appendLocalMessage, conversationKeyForEnvelope } from "../storage/localMessages";
+import {
+  appendLocalMessage,
+  conversationKeyForEnvelope,
+  conversationKeyForRecall,
+  removeLocalMessage
+} from "../storage/localMessages";
 import { getPrivateKeyRecord, savePrivateKeyRecord } from "../storage/privateKeyStore";
 import {
   addUnreadConversation,
@@ -172,13 +177,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUnreadConversationKeys(addUnreadConversation(user.id, key));
       }
     };
+    const handleMessageRecalled = (payload: MessageRecallPayload) => {
+      const key = conversationKeyForRecall(payload, user.id);
+      removeLocalMessage(key, payload.clientMessageId);
+    };
     nextSocket.on(SocketEvents.MessageNew, handleMessage);
+    nextSocket.on(SocketEvents.MessageRecalled, handleMessageRecalled);
     nextSocket.on("connect_error", () => {
       message.error("实时连接失败，请确认后端服务和 JWT 状态。");
     });
 
     return () => {
       nextSocket.off(SocketEvents.MessageNew, handleMessage);
+      nextSocket.off(SocketEvents.MessageRecalled, handleMessageRecalled);
       nextSocket.disconnect();
       setSocket(undefined);
     };

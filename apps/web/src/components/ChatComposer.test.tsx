@@ -16,6 +16,40 @@ describe("ChatComposer", () => {
     await waitFor(() => expect(onSendText).toHaveBeenCalledWith("hello😊"));
   });
 
+  it("offers additional emojis in the emoji picker", async () => {
+    const onSendText = vi.fn().mockResolvedValue(undefined);
+
+    render(<ChatComposer onSendText={onSendText} onSendImage={vi.fn()} />);
+
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "hello" } });
+    fireEvent.click(screen.getByLabelText("插入表情"));
+    fireEvent.click(screen.getByText("🤣"));
+    fireEvent.click(screen.getByLabelText("发送"));
+
+    await waitFor(() => expect(onSendText).toHaveBeenCalledWith("hello🤣"));
+  });
+
+  it("sends pasted images through the image sender", async () => {
+    const onSendImage = vi.fn().mockResolvedValue(undefined);
+    const file = new File(["image"], "pasted.png", { type: "image/png" });
+
+    render(<ChatComposer onSendText={vi.fn()} onSendImage={onSendImage} />);
+
+    fireEvent.paste(screen.getByRole("textbox"), {
+      clipboardData: {
+        items: [
+          {
+            kind: "file",
+            type: "image/png",
+            getAsFile: () => file
+          }
+        ]
+      }
+    });
+
+    await waitFor(() => expect(onSendImage).toHaveBeenCalledWith(file));
+  });
+
   it("inserts a requested sender mention before sending", async () => {
     const onSendText = vi.fn().mockResolvedValue(undefined);
 

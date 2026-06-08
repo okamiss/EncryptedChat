@@ -1,5 +1,11 @@
 import { CheckOutlined, EditOutlined, StopOutlined, TeamOutlined, UserAddOutlined } from "@ant-design/icons";
-import type { EncryptedMessageEnvelope, FriendView, GroupJoinRequestView, GroupView } from "@encrypted-chat/shared";
+import type {
+  EncryptedMessageEnvelope,
+  FriendView,
+  GroupJoinRequestView,
+  GroupView,
+  MessageRecallPayload
+} from "@encrypted-chat/shared";
 import { SocketEvents } from "@encrypted-chat/shared";
 import { App, Button, Empty, Input, List, Modal, Select, Space, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -17,7 +23,7 @@ import {
 import { useAutoScrollToBottom } from "../hooks/useAutoScrollToBottom";
 import * as api from "../services/api";
 import { useAuth } from "../state/AuthContext";
-import { appendLocalMessage, getLocalMessages } from "../storage/localMessages";
+import { appendLocalMessage, getLocalMessages, removeLocalMessage } from "../storage/localMessages";
 import { displayUserName } from "../utils/displayName";
 import { mentionedUserIdsInText } from "../utils/mentions";
 
@@ -103,6 +109,13 @@ export function GroupChatPage() {
       );
       markConversationRead(conversationKey);
     };
+    const handleMessageRecalled = (payload: MessageRecallPayload) => {
+      if (payload.conversationType !== "group" || payload.groupId !== groupId) {
+        return;
+      }
+      removeLocalMessage(conversationKey, payload.clientMessageId);
+      setEnvelopes((current) => current.filter((item) => item.clientMessageId !== payload.clientMessageId));
+    };
     const handleGroupUpdated = () => {
       void load();
       if (isOwner) {
@@ -111,9 +124,11 @@ export function GroupChatPage() {
     };
 
     socket.on(SocketEvents.MessageNew, handleNewMessage);
+    socket.on(SocketEvents.MessageRecalled, handleMessageRecalled);
     socket.on(SocketEvents.GroupUpdated, handleGroupUpdated);
     return () => {
       socket.off(SocketEvents.MessageNew, handleNewMessage);
+      socket.off(SocketEvents.MessageRecalled, handleMessageRecalled);
       socket.off(SocketEvents.GroupUpdated, handleGroupUpdated);
     };
   }, [conversationKey, groupId, isOwner, load, loadJoinRequests, markConversationRead, socket, user]);
@@ -238,6 +253,22 @@ export function GroupChatPage() {
     });
   }, []);
 
+  const recallMessage = useCallback(
+    (message: RenderedMessage) => {
+      if (!socket) {
+        return;
+      }
+      socket.emit(SocketEvents.MessageRecall, {
+        clientMessageId: message.clientMessageId,
+        conversationType: "group",
+        groupId
+      } satisfies MessageRecallPayload);
+      removeLocalMessage(conversationKey, message.clientMessageId);
+      setEnvelopes((current) => current.filter((item) => item.clientMessageId !== message.clientMessageId));
+    },
+    [conversationKey, groupId, socket]
+  );
+
   const inviteOptions = friends
     .filter((friend) => !group?.members.some((member) => member.user.id === friend.id))
     .map((friend) => ({ label: `${displayUserName(friend)} · ${friend.uid}`, value: friend.id }));
@@ -315,6 +346,7 @@ export function GroupChatPage() {
                 message={item}
                 onMentionSender={mentionSender}
                 onQuoteMessage={quoteMessage}
+                onRecallMessage={recallMessage}
               />
             ))}
           </Space>

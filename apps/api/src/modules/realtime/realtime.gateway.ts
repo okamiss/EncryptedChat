@@ -12,6 +12,7 @@ import { JwtService } from "@nestjs/jwt";
 import type {
   EncryptedMessageEnvelope,
   MessageErrorPayload,
+  MessageRecallPayload,
   MessageSentAck,
   PresencePayload
 } from "@encrypted-chat/shared";
@@ -124,6 +125,30 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
     } satisfies MessageSentAck);
   }
 
+  @SubscribeMessage(SocketEvents.MessageRecall)
+  async handleMessageRecall(@ConnectedSocket() client: AuthenticatedSocket, @MessageBody() body: MessageRecallPayload) {
+    const sender = client.data.user;
+    if (!sender) {
+      client.emit(SocketEvents.MessageError, {
+        clientMessageId: body.clientMessageId,
+        message: "Unauthorized socket"
+      } satisfies MessageErrorPayload);
+      return;
+    }
+
+    const payload: MessageRecallPayload = {
+      ...body,
+      fromUserId: sender.id,
+      recalledAt: new Date().toISOString()
+    };
+
+    if (body.conversationType === "direct") {
+      await this.forwardDirectRecall(sender.id, payload);
+    } else {
+      await this.forwardGroupRecall(sender.id, payload);
+    }
+  }
+
   private async forwardDirectMessage(senderId: string, message: EncryptedMessageEnvelope) {
     if (!message.toUserId) {
       throw new Error("Direct message missing toUserId");
@@ -143,6 +168,27 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
     }
 
     this.server.to(userRoom(senderId)).to(userRoom(message.toUserId)).emit(SocketEvents.MessageNew, message);
+  }
+
+  private async forwardDirectRecall(senderId: string, payload: MessageRecallPayload) {
+    if (!payload.toUserId) {
+      throw new Error("Direct message recall missing toUserId");
+    }
+
+    const [userAId, userBId] = sortFriendPair(senderId, payload.toUserId);
+    const friendship = await this.prisma.friendship.findUnique({
+      where: { userAId_userBId: { userAId, userBId } },
+      select: { id: true }
+    });
+    if (!friendship) {
+      this.realtimeEvents.emitToUser(senderId, SocketEvents.MessageError, {
+        clientMessageId: payload.clientMessageId,
+        message: "Users are not friends"
+      } satisfies MessageErrorPayload);
+      return;
+    }
+
+    this.server.to(userRoom(senderId)).to(userRoom(payload.toUserId)).emit(SocketEvents.MessageRecalled, payload);
   }
 
   private async forwardGroupMessage(senderId: string, message: EncryptedMessageEnvelope) {
@@ -168,5 +214,30 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
     }
 
     this.realtimeEvents.emitToGroup(message.groupId, SocketEvents.MessageNew, message);
+  }
+
+  private async forwardGroupRecall(senderId: string, payload: MessageRecallPayload) {
+    if (!payload.groupId) {
+      throw new Error("Group message recall missing groupId");
+    }
+
+    const membership = await this.prisma.groupMember.findUnique({
+      where: {
+        groupId_userId: {
+          groupId: payload.groupId,
+          userId: senderId
+        }
+      },
+      select: { groupId: true }
+    });
+    if (!membership) {
+      this.realtimeEvents.emitToUser(senderId, SocketEvents.MessageError, {
+        clientMessageId: payload.clientMessageId,
+        message: "You are not a member of this group"
+      } satisfies MessageErrorPayload);
+      return;
+    }
+
+    this.realtimeEvents.emitToGroup(payload.groupId, SocketEvents.MessageRecalled, payload);
   }
 }
