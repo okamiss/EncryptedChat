@@ -263,46 +263,100 @@ body {
   display: block;
 }
 
+.message-rich-content {
+  width: 100%;
+}
+
 .composer {
   border-top: 1px solid var(--section-border);
-  padding-top: 12px;
+  padding-top: 10px;
 }
 
-.composer .ant-space-compact {
-  align-items: stretch;
+.composer-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 34px;
+  margin-bottom: 4px;
 }
 
-.composer .ant-space-compact > .ant-btn,
-.composer .ant-space-compact > .ant-upload-wrapper {
-  align-self: stretch;
-  flex: 0 0 76px;
-  width: 76px;
+.composer-toolbar .ant-btn {
+  color: var(--muted-text);
 }
 
-.composer .ant-input {
+.composer-editor {
+  width: 100%;
+  min-height: 92px;
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--panel-bg);
+  color: var(--app-text);
   line-height: 1.6;
+  outline: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
-.composer .ant-btn {
-  height: auto !important;
-  min-height: 100%;
-  width: 76px;
+.composer-editor:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.14);
 }
 
-.composer .ant-upload-wrapper,
-.composer .ant-upload,
-.composer .ant-upload-select,
-.composer .ant-upload-wrapper > .ant-upload > span {
+.composer-editor.is-empty::before {
+  content: attr(data-placeholder);
+  color: var(--muted-text);
+  pointer-events: none;
+}
+
+.composer-image-chip {
+  position: relative;
   display: inline-flex;
-  align-items: stretch;
-  align-self: stretch;
-  height: auto;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: min(220px, 100%);
+  margin: 2px 6px 2px 0;
+  vertical-align: bottom;
 }
 
-.composer .ant-upload-wrapper .ant-btn {
-  height: auto !important;
-  min-height: 100%;
-  width: 76px;
+.composer-image-chip img {
+  width: 86px;
+  height: 86px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--panel-border);
+}
+
+.composer-image-name {
+  max-width: 118px;
+  color: var(--muted-text);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-image-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(15, 23, 42, 0.82);
+  color: #fff;
+  cursor: pointer;
+  line-height: 20px;
+  padding: 0;
+}
+
+.composer-actions {
+  width: 100%;
+  justify-content: flex-end;
+  margin-top: 8px;
 }
 
 .emoji-grid {

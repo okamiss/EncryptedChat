@@ -19,7 +19,7 @@ import { SocketEvents } from "@encrypted-chat/shared";
 import { App, Button, Empty, Input, List, Modal, Select, Space, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ChatComposer, type ComposerInsertRequest } from "../components/ChatComposer";
+import { ChatComposer, type ComposerInsertRequest, type ComposerMessagePart } from "../components/ChatComposer";
 import { MessageBubble, type RenderedMessage } from "../components/MessageBubble";
 import { decryptImageBlob, encryptImageFile } from "../crypto/files";
 import {
@@ -33,6 +33,7 @@ import { useAutoScrollToBottom } from "../hooks/useAutoScrollToBottom";
 import * as api from "../services/api";
 import { useAuth } from "../state/AuthContext";
 import { appendLocalMessage, getLocalMessages, removeLocalMessage } from "../storage/localMessages";
+import { plainMessageText, prepareComposerMessage, uploadedImageMessage } from "../utils/composerMessages";
 import { displayUserName } from "../utils/displayName";
 import { mentionedUserIdsInText } from "../utils/mentions";
 
@@ -188,63 +189,37 @@ export function GroupChatPage() {
     };
   }, [apiClient, envelopes, group, groupKey, user]);
 
-  const sendText = useCallback(
-    async (text: string) => {
+  const sendMessage = useCallback(
+    async (parts: ComposerMessagePart[]) => {
       if (!groupKey || !socket) {
         return;
       }
+      const prepared = await prepareComposerMessage(parts, async (file) => {
+        const encryptedFile = await encryptImageFile(file);
+        const uploaded = await api.uploadEncryptedFile(apiClient, encryptedFile.encryptedBlob, {
+          scopeType: "group",
+          groupId,
+          sha256: encryptedFile.sha256
+        });
+        return uploadedImageMessage(file, encryptedFile, uploaded);
+      });
       const envelope = await encryptGroupMessage({
-        plaintext: { kind: "text", text },
-        messageType: "text",
+        plaintext: prepared.plaintext,
+        messageType: prepared.messageType,
         groupId,
         groupKey,
         keyVersion
       });
-      const mentionedUserIds = group ? mentionedUserIdsInText(text, group.members) : [];
+      if (prepared.attachment) {
+        envelope.attachment = prepared.attachment;
+      }
+      const mentionedUserIds = group ? mentionedUserIdsInText(plainMessageText(prepared.plaintext), group.members) : [];
       if (mentionedUserIds.length > 0) {
         envelope.mentionedUserIds = mentionedUserIds;
       }
       socket.emit(SocketEvents.MessageSend, envelope);
     },
-    [group, groupId, groupKey, keyVersion, socket]
-  );
-
-  const sendImage = useCallback(
-    async (file: File) => {
-      if (!groupKey || !socket) {
-        return;
-      }
-      const encryptedFile = await encryptImageFile(file);
-      const uploaded = await api.uploadEncryptedFile(apiClient, encryptedFile.encryptedBlob, {
-        scopeType: "group",
-        groupId,
-        sha256: encryptedFile.sha256
-      });
-      const plaintext: PlainMessage = {
-        kind: "image",
-        fileId: uploaded.id,
-        fileKey: encryptedFile.fileKey,
-        fileIv: encryptedFile.fileIv,
-        mimeType: file.type || "image/png",
-        name: file.name,
-        size: file.size,
-        sha256: uploaded.sha256
-      };
-      const envelope = await encryptGroupMessage({
-        plaintext,
-        messageType: "image",
-        groupId,
-        groupKey,
-        keyVersion
-      });
-      envelope.attachment = {
-        fileId: uploaded.id,
-        size: uploaded.size,
-        sha256: uploaded.sha256
-      };
-      socket.emit(SocketEvents.MessageSend, envelope);
-    },
-    [apiClient, groupId, groupKey, keyVersion, socket]
+    [apiClient, group, groupId, groupKey, keyVersion, socket]
   );
 
   const quoteMessage = useCallback((message: RenderedMessage) => {
@@ -395,16 +370,9 @@ export function GroupChatPage() {
       <ChatComposer
         disabled={!groupKey || !socket}
         insertRequest={composerInsert}
-        onSendText={async (text) => {
+        onSendMessage={async (parts) => {
           try {
-            await sendText(text);
-          } catch (error) {
-            message.error(error instanceof Error ? error.message : "发送失败");
-          }
-        }}
-        onSendImage={async (file) => {
-          try {
-            await sendImage(file);
+            await sendMessage(parts);
           } catch (error) {
             message.error(error instanceof Error ? error.message : "发送失败");
           }
@@ -578,6 +546,34 @@ async function renderPlainMessage(
       sentAt: envelope.sentAt,
       status: "decrypted",
       text: plaintext.text
+    };
+  }
+
+  if (plaintext.kind === "rich") {
+    const richParts = await Promise.all(
+      plaintext.parts.map(async (part) => {
+        if (part.type === "text") {
+          return part;
+        }
+        const encryptedBlob = await api.downloadEncryptedFile(apiClient, part.fileId);
+        const imageBlob = await decryptImageBlob(encryptedBlob, part.fileKey, part.fileIv, part.mimeType);
+        const imageUrl = URL.createObjectURL(imageBlob);
+        objectUrls.push(imageUrl);
+        return {
+          type: "image" as const,
+          imageUrl,
+          imageName: part.name
+        };
+      })
+    );
+    return {
+      clientMessageId: envelope.clientMessageId,
+      own,
+      senderName,
+      sentAt: envelope.sentAt,
+      status: "decrypted",
+      text: plainMessageText(plaintext),
+      richParts
     };
   }
 

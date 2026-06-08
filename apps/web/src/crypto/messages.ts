@@ -13,6 +13,22 @@ export type PlainMessage =
       name: string;
       size: number;
       sha256: string;
+    }
+  | {
+      kind: "rich";
+      parts: Array<
+        | { type: "text"; text: string }
+        | {
+            type: "image";
+            fileId: string;
+            fileKey: string;
+            fileIv: string;
+            mimeType: string;
+            name: string;
+            size: number;
+            sha256: string;
+          }
+      >;
     };
 
 interface DirectEncryptOptions {

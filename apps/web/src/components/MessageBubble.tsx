@@ -10,6 +10,7 @@ export interface RenderedMessage {
   text?: string;
   imageUrl?: string;
   imageName?: string;
+  richParts?: Array<{ type: "text"; text: string } | { type: "image"; imageUrl: string; imageName: string }>;
 }
 
 interface MessageBubbleProps {
@@ -21,7 +22,7 @@ interface MessageBubbleProps {
 
 export function MessageBubble({ message, onMentionSender, onQuoteMessage, onRecallMessage }: MessageBubbleProps) {
   const canUseActions = !message.own;
-  const canQuote = message.status === "decrypted" && Boolean(message.text || message.imageName);
+  const canQuote = message.status === "decrypted" && Boolean(message.text || message.imageName || message.richParts);
   const peerActions =
     canUseActions && (onQuoteMessage || onMentionSender) ? (
       <div className="message-actions">
@@ -73,13 +74,29 @@ export function MessageBubble({ message, onMentionSender, onQuoteMessage, onReca
           {message.senderName}
           {message.sentAt ? ` · ${new Date(message.sentAt).toLocaleString()}` : ""}
         </div>
-        {message.status === "decrypted" && message.text && <Typography.Text>{message.text}</Typography.Text>}
+        {message.status === "decrypted" && !message.richParts && message.text && <Typography.Text>{message.text}</Typography.Text>}
         {message.status === "decrypted" && message.imageUrl && (
           <Space direction="vertical" size={6}>
             <Image className="message-image" src={message.imageUrl} alt={message.imageName ?? "encrypted image"} />
             <Typography.Text type="secondary">
               <FileImageOutlined /> {message.imageName}
             </Typography.Text>
+          </Space>
+        )}
+        {message.status === "decrypted" && message.richParts && (
+          <Space direction="vertical" size={8} className="message-rich-content">
+            {message.richParts.map((part, index) =>
+              part.type === "text" ? (
+                <Typography.Text key={index}>{part.text}</Typography.Text>
+              ) : (
+                <Space key={index} direction="vertical" size={6}>
+                  <Image className="message-image" src={part.imageUrl} alt={part.imageName} />
+                  <Typography.Text type="secondary">
+                    <FileImageOutlined /> {part.imageName}
+                  </Typography.Text>
+                </Space>
+              )
+            )}
           </Space>
         )}
         {message.status === "encrypted" && (

@@ -1,96 +1,140 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
-import { ChatComposer } from "./ChatComposer";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ChatComposer, type ComposerMessagePart } from "./ChatComposer";
 
 describe("ChatComposer", () => {
+  beforeEach(() => {
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: vi.fn(() => "blob:preview")
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: vi.fn()
+    });
+  });
+
   it("inserts a system emoji into the message before sending", async () => {
-    const onSendText = vi.fn().mockResolvedValue(undefined);
+    const onSendMessage = vi.fn().mockResolvedValue(undefined);
 
-    render(<ChatComposer onSendText={onSendText} onSendImage={vi.fn()} />);
+    render(<ChatComposer onSendMessage={onSendMessage} />);
 
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "hello" } });
+    typeIntoComposer("hello");
     fireEvent.click(screen.getByLabelText("插入表情"));
     fireEvent.click(screen.getByText("😊"));
     fireEvent.click(screen.getByLabelText("发送"));
 
-    await waitFor(() => expect(onSendText).toHaveBeenCalledWith("hello😊"));
+    await waitFor(() =>
+      expect(onSendMessage).toHaveBeenCalledWith([{ type: "text", text: "hello😊" } satisfies ComposerMessagePart])
+    );
   });
 
   it("offers additional emojis in the emoji picker", async () => {
-    const onSendText = vi.fn().mockResolvedValue(undefined);
+    const onSendMessage = vi.fn().mockResolvedValue(undefined);
 
-    render(<ChatComposer onSendText={onSendText} onSendImage={vi.fn()} />);
+    render(<ChatComposer onSendMessage={onSendMessage} />);
 
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "hello" } });
+    typeIntoComposer("hello");
     fireEvent.click(screen.getByLabelText("插入表情"));
     fireEvent.click(screen.getByText("🤣"));
     fireEvent.click(screen.getByLabelText("发送"));
 
-    await waitFor(() => expect(onSendText).toHaveBeenCalledWith("hello🤣"));
+    await waitFor(() => expect(onSendMessage).toHaveBeenCalledWith([{ type: "text", text: "hello🤣" }]));
   });
 
-  it("sends pasted images through the image sender", async () => {
-    const onSendImage = vi.fn().mockResolvedValue(undefined);
+  it("keeps pasted images in the draft until sending", async () => {
+    const onSendMessage = vi.fn().mockResolvedValue(undefined);
     const file = new File(["image"], "pasted.png", { type: "image/png" });
 
-    render(<ChatComposer onSendText={vi.fn()} onSendImage={onSendImage} />);
+    render(<ChatComposer onSendMessage={onSendMessage} />);
 
     fireEvent.paste(screen.getByRole("textbox"), {
       clipboardData: {
-        items: [
-          {
-            kind: "file",
-            type: "image/png",
-            getAsFile: () => file
-          }
-        ]
+        items: [{ kind: "file", type: "image/png", getAsFile: () => file }]
       }
     });
 
-    await waitFor(() => expect(onSendImage).toHaveBeenCalledWith(file));
+    expect(onSendMessage).not.toHaveBeenCalled();
+    expect(screen.getByText("pasted.png")).not.toBeNull();
+
+    fireEvent.click(screen.getByLabelText("发送"));
+
+    await waitFor(() => expect(onSendMessage).toHaveBeenCalledWith([{ type: "image", file }]));
+  });
+
+  it("sends text and draft images as one ordered message", async () => {
+    const onSendMessage = vi.fn().mockResolvedValue(undefined);
+    const file = new File(["image"], "mixed.png", { type: "image/png" });
+
+    render(<ChatComposer onSendMessage={onSendMessage} />);
+
+    typeIntoComposer("before ");
+    fireEvent.paste(screen.getByRole("textbox"), {
+      clipboardData: {
+        items: [{ kind: "file", type: "image/png", getAsFile: () => file }]
+      }
+    });
+    typeIntoComposer(" after");
+    fireEvent.click(screen.getByLabelText("发送"));
+
+    await waitFor(() =>
+      expect(onSendMessage).toHaveBeenCalledWith([
+        { type: "text", text: "before " },
+        { type: "image", file },
+        { type: "text", text: " after" }
+      ])
+    );
   });
 
   it("inserts a requested sender mention before sending", async () => {
-    const onSendText = vi.fn().mockResolvedValue(undefined);
+    const onSendMessage = vi.fn().mockResolvedValue(undefined);
 
     render(
       <ChatComposer
-        onSendText={onSendText}
-        onSendImage={vi.fn()}
+        onSendMessage={onSendMessage}
         insertRequest={{ id: "mention-1", type: "mention", label: "Alice" }}
       />
     );
 
-    await waitFor(() => expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("@Alice "));
+    await waitFor(() => expect(screen.getByRole("textbox").textContent).toContain("@Alice "));
     fireEvent.click(screen.getByLabelText("发送"));
 
-    await waitFor(() => expect(onSendText).toHaveBeenCalledWith("@Alice"));
+    await waitFor(() => expect(onSendMessage).toHaveBeenCalledWith([{ type: "text", text: "@Alice" }]));
   });
 
   it("keeps focus in the composer after sending", async () => {
-    const onSendText = vi.fn().mockResolvedValue(undefined);
+    const onSendMessage = vi.fn().mockResolvedValue(undefined);
 
-    render(<ChatComposer onSendText={onSendText} onSendImage={vi.fn()} />);
+    render(<ChatComposer onSendMessage={onSendMessage} />);
 
     const composer = screen.getByRole("textbox");
-    fireEvent.change(composer, { target: { value: "hello" } });
+    typeIntoComposer("hello");
     fireEvent.click(screen.getByLabelText("发送"));
 
-    await waitFor(() => expect(onSendText).toHaveBeenCalledWith("hello"));
+    await waitFor(() => expect(onSendMessage).toHaveBeenCalledWith([{ type: "text", text: "hello" }]));
     await waitFor(() => expect(document.activeElement).toBe(composer));
   });
 
   it("inserts a requested quoted message into the composer", async () => {
     render(
       <ChatComposer
-        onSendText={vi.fn()}
-        onSendImage={vi.fn()}
+        onSendMessage={vi.fn()}
         insertRequest={{ id: "quote-1", type: "quote", senderName: "Alice", text: "hello from before" }}
       />
     );
 
-    await waitFor(() =>
-      expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("> Alice: hello from before\n\n")
-    );
+    await waitFor(() => expect(screen.getByRole("textbox").textContent).toContain("> Alice: hello from before"));
   });
 });
+
+function typeIntoComposer(text: string) {
+  const composer = screen.getByRole("textbox");
+  composer.append(document.createTextNode(text));
+  const range = document.createRange();
+  range.selectNodeContents(composer);
+  range.collapse(false);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  fireEvent.input(composer);
+}

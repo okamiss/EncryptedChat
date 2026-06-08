@@ -3,7 +3,7 @@ export type PublicJwk = JsonWebKey;
 export type FriendRequestStatus = "pending" | "accepted" | "rejected";
 export type GroupMemberRole = "owner" | "admin" | "member";
 export type ConversationType = "direct" | "group";
-export type MessageType = "text" | "image";
+export type MessageType = "text" | "image" | "rich";
 export type FileScopeType = "direct" | "group";
 
 export interface SafeUser {

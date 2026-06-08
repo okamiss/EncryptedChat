@@ -26,6 +26,54 @@ describe("direct message encryption", () => {
       text: "hello"
     });
   });
+
+  it("encrypts rich messages with ordered text and image parts", async () => {
+    const aliceKeys = await generateIdentityKeyPair();
+    const bobKeys = await generateIdentityKeyPair();
+    const alice = user("alice", await exportPublicKey(aliceKeys.publicKey));
+    const bob = user("bob", await exportPublicKey(bobKeys.publicKey));
+
+    const envelope = await encryptDirectMessage({
+      plaintext: {
+        kind: "rich",
+        parts: [
+          { type: "text", text: "look " },
+          {
+            type: "image",
+            fileId: "file-1",
+            fileKey: "file-key",
+            fileIv: "file-iv",
+            mimeType: "image/png",
+            name: "pasted.png",
+            size: 10,
+            sha256: "sha"
+          },
+          { type: "text", text: " nice" }
+        ]
+      },
+      messageType: "rich",
+      fromUser: alice,
+      toUser: bob
+    });
+
+    await expect(decryptDirectMessage(envelope, bobKeys.privateKey, bob.id)).resolves.toEqual({
+      kind: "rich",
+      parts: [
+        { type: "text", text: "look " },
+        {
+          type: "image",
+          fileId: "file-1",
+          fileKey: "file-key",
+          fileIv: "file-iv",
+          mimeType: "image/png",
+          name: "pasted.png",
+          size: 10,
+          sha256: "sha"
+        },
+        { type: "text", text: " nice" }
+      ]
+    });
+  });
 });
 
 function user(id: string, publicKey: JsonWebKey): SafeUser {
