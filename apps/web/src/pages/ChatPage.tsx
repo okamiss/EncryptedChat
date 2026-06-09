@@ -18,6 +18,7 @@ import {
   appendLocalRecallNotice,
   getLocalMessages,
   getLocalRecallNotices,
+  type LocalRecallNotice,
   removeLocalMessage
 } from "../storage/localMessages";
 import { plainMessageText, prepareComposerMessage, uploadedImageMessage } from "../utils/composerMessages";
@@ -25,14 +26,15 @@ import { displayUserName } from "../utils/displayName";
 
 export function ChatPage() {
   const { friendId = "" } = useParams();
-  const { apiClient, user, privateKey, socket, markConversationRead } = useAuth();
+  const { apiClient, user, privateKey, socket, unreadConversationCounts, markConversationRead } = useAuth();
   const { message } = App.useApp();
   const [friends, setFriends] = useState<FriendView[]>([]);
   const [envelopes, setEnvelopes] = useState<EncryptedMessageEnvelope[]>([]);
-  const [recallNotices, setRecallNotices] = useState<MessageRecallPayload[]>([]);
+  const [recallNotices, setRecallNotices] = useState<LocalRecallNotice[]>([]);
+  const [initialUnreadCount, setInitialUnreadCount] = useState(0);
   const [rendered, setRendered] = useState<RenderedMessage[]>([]);
   const [composerInsert, setComposerInsert] = useState<ComposerInsertRequest>();
-  const messageListRef = useAutoScrollToBottom(rendered);
+  const messageListRef = useAutoScrollToBottom(rendered, { disabled: initialUnreadCount > 0 });
 
   const friend = friends.find((item) => item.id === friendId);
   const conversationKey = useMemo(() => `direct:${friendId}`, [friendId]);
@@ -45,6 +47,7 @@ export function ChatPage() {
   }, [apiClient, message]);
 
   useEffect(() => {
+    setInitialUnreadCount(unreadConversationCounts[conversationKey] ?? 0);
     setEnvelopes(getLocalMessages(conversationKey));
     setRecallNotices(getLocalRecallNotices(conversationKey));
     markConversationRead(conversationKey);
@@ -81,11 +84,16 @@ export function ChatPage() {
         return;
       }
 
+      const originalSentAt = getLocalMessages(conversationKey).find(
+        (item) => item.clientMessageId === payload.clientMessageId
+      )?.sentAt;
       removeLocalMessage(conversationKey, payload.clientMessageId);
-      appendLocalRecallNotice(conversationKey, payload);
+      appendLocalRecallNotice(conversationKey, payload, originalSentAt);
       setEnvelopes((current) => current.filter((item) => item.clientMessageId !== payload.clientMessageId));
       setRecallNotices((current) =>
-        current.some((item) => item.clientMessageId === payload.clientMessageId) ? current : [...current, payload]
+        current.some((item) => item.clientMessageId === payload.clientMessageId)
+          ? current
+          : [...current, originalSentAt ? { ...payload, anchorSentAt: originalSentAt } : payload]
       );
     };
 
@@ -207,10 +215,12 @@ export function ChatPage() {
         recalledAt: new Date().toISOString()
       };
       removeLocalMessage(conversationKey, message.clientMessageId);
-      appendLocalRecallNotice(conversationKey, localNotice);
+      appendLocalRecallNotice(conversationKey, localNotice, message.sentAt);
       setEnvelopes((current) => current.filter((item) => item.clientMessageId !== message.clientMessageId));
       setRecallNotices((current) =>
-        current.some((item) => item.clientMessageId === localNotice.clientMessageId) ? current : [...current, localNotice]
+        current.some((item) => item.clientMessageId === localNotice.clientMessageId)
+          ? current
+          : [...current, message.sentAt ? { ...localNotice, anchorSentAt: message.sentAt } : localNotice]
       );
     },
     [conversationKey, friend, socket, user?.id]
@@ -245,6 +255,8 @@ export function ChatPage() {
         <MessageList
           ref={messageListRef}
           messages={rendered}
+          unreadCount={initialUnreadCount}
+          onJumpToLatest={() => setInitialUnreadCount(0)}
           onMentionSender={mentionSender}
           onQuoteMessage={quoteMessage}
           onRecallMessage={recallMessage}
@@ -353,7 +365,7 @@ function recalledView(payload: MessageRecallPayload, senderName: string): Render
     clientMessageId: `recall:${payload.clientMessageId}`,
     own: false,
     senderName,
-    sentAt: payload.recalledAt,
+    sentAt: "anchorSentAt" in payload && typeof payload.anchorSentAt === "string" ? payload.anchorSentAt : payload.recalledAt,
     status: "system",
     text: `${senderName}撤回了一条消息`
   };

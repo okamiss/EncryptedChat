@@ -18,7 +18,7 @@ export function ProfilePage() {
   } = useAuth();
   const { message } = App.useApp();
   const [displayNameForm] = Form.useForm<{ displayName?: string }>();
-  const [passwordForm] = Form.useForm<{ currentPassword: string; newPassword: string }>();
+  const [passwordForm] = Form.useForm<{ currentPassword: string; newPassword: string; confirmPassword: string }>();
   const [backupForm] = Form.useForm<{ password: string }>();
   const [backupFile, setBackupFile] = useState<File>();
   const backupInputRef = useRef<HTMLInputElement>(null);
@@ -109,8 +109,9 @@ export function ProfilePage() {
         </Form>
         <Form
           form={passwordForm}
+          className="profile-password-form"
           layout="inline"
-          onFinish={async (values: { currentPassword: string; newPassword: string }) => {
+          onFinish={async (values: { currentPassword: string; newPassword: string; confirmPassword: string }) => {
             try {
               await updatePassword(values.currentPassword, values.newPassword);
               passwordForm.resetFields();
@@ -121,7 +122,7 @@ export function ProfilePage() {
           }}
         >
           <Form.Item name="currentPassword" rules={[{ required: true, message: "请输入当前密码" }]}>
-            <Input.Password placeholder="当前密码" />
+            <Input.Password placeholder="当前密码" name="currentPassword" />
           </Form.Item>
           <Form.Item
             name="newPassword"
@@ -130,7 +131,24 @@ export function ProfilePage() {
               { min: 8, message: "新密码至少 8 位" }
             ]}
           >
-            <Input.Password placeholder="新密码" />
+            <Input.Password placeholder="新密码" name="newPassword" />
+          </Form.Item>
+          <Form.Item
+            name="confirmPassword"
+            dependencies={["newPassword"]}
+            rules={[
+              { required: true, message: "请再次输入新密码" },
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  if (!value || getFieldValue("newPassword") === value) {
+                    return Promise.resolve();
+                  }
+                  return Promise.reject(new Error("两次输入的新密码不一致"));
+                }
+              })
+            ]}
+          >
+            <Input.Password placeholder="确认新密码" name="confirmPassword" />
           </Form.Item>
           <Button type="primary" htmlType="submit" icon={<KeyOutlined />} disabled={!user}>
             更新密码

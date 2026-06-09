@@ -41,6 +41,7 @@ import {
   appendLocalRecallNotice,
   getLocalMessages,
   getLocalRecallNotices,
+  type LocalRecallNotice,
   removeLocalMessage
 } from "../storage/localMessages";
 import { plainMessageText, prepareComposerMessage, uploadedImageMessage } from "../utils/composerMessages";
@@ -51,14 +52,15 @@ import { mentionedUserIdsInText } from "../utils/mentions";
 export function GroupChatPage() {
   const { groupId = "" } = useParams();
   const navigate = useNavigate();
-  const { apiClient, user, privateKey, socket, markConversationRead } = useAuth();
+  const { apiClient, user, privateKey, socket, unreadConversationCounts, markConversationRead } = useAuth();
   const { message, modal } = App.useApp();
   const [group, setGroup] = useState<GroupView | undefined>();
   const [friends, setFriends] = useState<FriendView[]>([]);
   const [inviteeId, setInviteeId] = useState<string>();
   const [groupKey, setGroupKey] = useState<CryptoKey | undefined>();
   const [envelopes, setEnvelopes] = useState<EncryptedMessageEnvelope[]>([]);
-  const [recallNotices, setRecallNotices] = useState<MessageRecallPayload[]>([]);
+  const [recallNotices, setRecallNotices] = useState<LocalRecallNotice[]>([]);
+  const [initialUnreadCount, setInitialUnreadCount] = useState(0);
   const [rendered, setRendered] = useState<RenderedMessage[]>([]);
   const [membersOpen, setMembersOpen] = useState(false);
   const [joinRequestsOpen, setJoinRequestsOpen] = useState(false);
@@ -66,7 +68,7 @@ export function GroupChatPage() {
   const [renaming, setRenaming] = useState(false);
   const [groupNameDraft, setGroupNameDraft] = useState("");
   const [composerInsert, setComposerInsert] = useState<ComposerInsertRequest>();
-  const messageListRef = useAutoScrollToBottom(rendered);
+  const messageListRef = useAutoScrollToBottom(rendered, { disabled: initialUnreadCount > 0 });
 
   const conversationKey = useMemo(() => `group:${groupId}`, [groupId]);
   const myMembership = group?.members.find((member) => member.user.id === user?.id);
@@ -101,6 +103,7 @@ export function GroupChatPage() {
   }, [canManageJoinRequests, loadJoinRequests, message]);
 
   useEffect(() => {
+    setInitialUnreadCount(unreadConversationCounts[conversationKey] ?? 0);
     setEnvelopes(getLocalMessages(conversationKey));
     setRecallNotices(getLocalRecallNotices(conversationKey));
     markConversationRead(conversationKey);
@@ -138,11 +141,16 @@ export function GroupChatPage() {
       if (payload.conversationType !== "group" || payload.groupId !== groupId) {
         return;
       }
+      const originalSentAt = getLocalMessages(conversationKey).find(
+        (item) => item.clientMessageId === payload.clientMessageId
+      )?.sentAt;
       removeLocalMessage(conversationKey, payload.clientMessageId);
-      appendLocalRecallNotice(conversationKey, payload);
+      appendLocalRecallNotice(conversationKey, payload, originalSentAt);
       setEnvelopes((current) => current.filter((item) => item.clientMessageId !== payload.clientMessageId));
       setRecallNotices((current) =>
-        current.some((item) => item.clientMessageId === payload.clientMessageId) ? current : [...current, payload]
+        current.some((item) => item.clientMessageId === payload.clientMessageId)
+          ? current
+          : [...current, originalSentAt ? { ...payload, anchorSentAt: originalSentAt } : payload]
       );
     };
     const handleGroupUpdated = (payload?: { groupId?: string; action?: string }) => {
@@ -284,10 +292,12 @@ export function GroupChatPage() {
         recalledAt: new Date().toISOString()
       };
       removeLocalMessage(conversationKey, message.clientMessageId);
-      appendLocalRecallNotice(conversationKey, localNotice);
+      appendLocalRecallNotice(conversationKey, localNotice, message.sentAt);
       setEnvelopes((current) => current.filter((item) => item.clientMessageId !== message.clientMessageId));
       setRecallNotices((current) =>
-        current.some((item) => item.clientMessageId === localNotice.clientMessageId) ? current : [...current, localNotice]
+        current.some((item) => item.clientMessageId === localNotice.clientMessageId)
+          ? current
+          : [...current, message.sentAt ? { ...localNotice, anchorSentAt: message.sentAt } : localNotice]
       );
     },
     [conversationKey, groupId, socket, user?.id]
@@ -431,6 +441,8 @@ export function GroupChatPage() {
         <MessageList
           ref={messageListRef}
           messages={rendered}
+          unreadCount={initialUnreadCount}
+          onJumpToLatest={() => setInitialUnreadCount(0)}
           onMentionSender={mentionSender}
           onQuoteMessage={quoteMessage}
           onRecallMessage={recallMessage}
@@ -687,7 +699,7 @@ function recalledView(payload: MessageRecallPayload, senderName: string): Render
     clientMessageId: `recall:${payload.clientMessageId}`,
     own: false,
     senderName,
-    sentAt: payload.recalledAt,
+    sentAt: "anchorSentAt" in payload && typeof payload.anchorSentAt === "string" ? payload.anchorSentAt : payload.recalledAt,
     status: "system",
     text: `${senderName}撤回了一条消息`
   };

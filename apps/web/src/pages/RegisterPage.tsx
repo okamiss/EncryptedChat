@@ -24,7 +24,7 @@ export function RegisterPage() {
           </div>
           <Form
             layout="vertical"
-            onFinish={async (values: { username: string; password: string }) => {
+            onFinish={async (values: { username: string; password: string; confirmPassword: string }) => {
               try {
                 await register(values.username, values.password);
                 navigate("/friends", { replace: true });
@@ -41,7 +41,7 @@ export function RegisterPage() {
                 { min: 3, message: "至少 3 个字符" }
               ]}
             >
-              <Input prefix={<UserOutlined />} autoComplete="username" />
+              <Input prefix={<UserOutlined />} autoComplete="username" name="username" />
             </Form.Item>
             <Form.Item
               name="password"
@@ -51,7 +51,25 @@ export function RegisterPage() {
                 { min: 8, message: "至少 8 个字符" }
               ]}
             >
-              <Input.Password prefix={<LockOutlined />} autoComplete="new-password" />
+              <Input.Password prefix={<LockOutlined />} autoComplete="new-password" name="password" />
+            </Form.Item>
+            <Form.Item
+              name="confirmPassword"
+              label="确认密码"
+              dependencies={["password"]}
+              rules={[
+                { required: true, message: "请再次输入密码" },
+                ({ getFieldValue }) => ({
+                  validator(_, value) {
+                    if (!value || getFieldValue("password") === value) {
+                      return Promise.resolve();
+                    }
+                    return Promise.reject(new Error("两次输入的密码不一致"));
+                  }
+                })
+              ]}
+            >
+              <Input.Password prefix={<LockOutlined />} autoComplete="new-password" name="confirmPassword" />
             </Form.Item>
             <Button type="primary" htmlType="submit" block>
               注册并生成密钥

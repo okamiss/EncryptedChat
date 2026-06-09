@@ -17,6 +17,7 @@ import {
   appendLocalRecallNotice,
   conversationKeyForEnvelope,
   conversationKeyForRecall,
+  getLocalMessages,
   hasLocalMessage,
   removeLocalMessage
 } from "../storage/localMessages";
@@ -271,8 +272,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
     const handleMessageRecalled = (payload: MessageRecallPayload) => {
       const key = conversationKeyForRecall(payload, user.id);
+      const originalSentAt = getLocalMessages(key).find((item) => item.clientMessageId === payload.clientMessageId)?.sentAt;
       removeLocalMessage(key, payload.clientMessageId);
-      appendLocalRecallNotice(key, payload);
+      appendLocalRecallNotice(key, payload, originalSentAt);
     };
     nextSocket.on(SocketEvents.MessageNew, handleMessage);
     nextSocket.on(SocketEvents.MessageRecalled, handleMessageRecalled);

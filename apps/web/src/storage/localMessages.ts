@@ -1,5 +1,9 @@
 import type { EncryptedMessageEnvelope, MessageRecallPayload } from "@encrypted-chat/shared";
 
+export interface LocalRecallNotice extends MessageRecallPayload {
+  anchorSentAt?: string;
+}
+
 export function conversationKeyForEnvelope(envelope: EncryptedMessageEnvelope, currentUserId: string): string {
   if (envelope.conversationType === "group") {
     return `group:${envelope.groupId}`;
@@ -28,13 +32,13 @@ export function getLocalMessages(conversationKey: string): EncryptedMessageEnvel
   }
 }
 
-export function getLocalRecallNotices(conversationKey: string): MessageRecallPayload[] {
+export function getLocalRecallNotices(conversationKey: string): LocalRecallNotice[] {
   const raw = localStorage.getItem(recallStorageKey(conversationKey));
   if (!raw) {
     return [];
   }
   try {
-    return JSON.parse(raw) as MessageRecallPayload[];
+    return JSON.parse(raw) as LocalRecallNotice[];
   } catch {
     return [];
   }
@@ -61,11 +65,12 @@ export function removeLocalMessage(conversationKey: string, clientMessageId: str
 
 export function appendLocalRecallNotice(
   conversationKey: string,
-  payload: MessageRecallPayload
-): MessageRecallPayload[] {
+  payload: MessageRecallPayload,
+  anchorSentAt?: string
+): LocalRecallNotice[] {
   const notices = getLocalRecallNotices(conversationKey);
   if (!notices.some((notice) => notice.clientMessageId === payload.clientMessageId)) {
-    notices.push(payload);
+    notices.push(anchorSentAt ? { ...payload, anchorSentAt } : payload);
     localStorage.setItem(recallStorageKey(conversationKey), JSON.stringify(notices));
   }
   return notices;

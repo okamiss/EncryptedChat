@@ -84,4 +84,20 @@ describe("localMessages", () => {
 
     expect(getLocalRecallNotices("group:group-1")).toEqual([payload]);
   });
+
+  it("keeps the original message time on recall notices for timeline placement", () => {
+    const payload: MessageRecallPayload = {
+      clientMessageId: "message-1",
+      conversationType: "group",
+      groupId: "group-1",
+      recalledAt: "2026-06-09T09:00:00.000Z"
+    };
+
+    appendLocalRecallNotice("group:group-1", payload, "2026-06-09T08:00:00.000Z");
+
+    expect(getLocalRecallNotices("group:group-1")[0]).toMatchObject({
+      clientMessageId: "message-1",
+      anchorSentAt: "2026-06-09T08:00:00.000Z"
+    });
+  });
 });

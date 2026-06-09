@@ -1,9 +1,12 @@
 import { useEffect, useRef } from "react";
 
-export function useAutoScrollToBottom(dependency: unknown) {
+export function useAutoScrollToBottom(dependency: unknown, options: { disabled?: boolean } = {}) {
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (options.disabled) {
+      return;
+    }
     const list = listRef.current;
     if (!list) {
       return;
@@ -33,7 +36,7 @@ export function useAutoScrollToBottom(dependency: unknown) {
       cancelAnimationFrame(frameId);
       observer.disconnect();
     };
-  }, [dependency]);
+  }, [dependency, options.disabled]);
 
   return listRef;
 }
