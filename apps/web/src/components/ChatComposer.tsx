@@ -54,6 +54,7 @@ const IME_CARET_ANCHOR = "\u200b";
 
 export function ChatComposer({ disabled, insertRequest, onSendMessage }: ChatComposerProps) {
   const editorRef = useRef<HTMLDivElement>(null);
+  const savedRangeRef = useRef<Range | null>(null);
   const imageIdRef = useRef(0);
   const imagesRef = useRef(new Map<string, DraftImage>());
   const [sending, setSending] = useState(false);
@@ -66,6 +67,15 @@ export function ChatComposer({ disabled, insertRequest, onSendMessage }: ChatCom
 
   const markDraftChanged = () => setDraftVersion((current) => current + 1);
 
+  const saveCurrentSelection = () => {
+    const editor = editorRef.current;
+    const selection = window.getSelection();
+    if (!editor || !selection || selection.rangeCount === 0 || !editor.contains(selection.anchorNode)) {
+      return;
+    }
+    savedRangeRef.current = selection.getRangeAt(0).cloneRange();
+  };
+
   const sendDraft = async () => {
     const parts = serializeDraft(editorRef.current, imagesRef.current);
     if (parts.length === 0) {
@@ -77,6 +87,7 @@ export function ChatComposer({ disabled, insertRequest, onSendMessage }: ChatCom
     try {
       await onSendMessage(parts);
       clearDraft(editorRef.current, imagesRef.current);
+      savedRangeRef.current = null;
       markDraftChanged();
     } finally {
       setSending(false);
@@ -85,7 +96,8 @@ export function ChatComposer({ disabled, insertRequest, onSendMessage }: ChatCom
   };
 
   const insertText = (text: string) => {
-    insertNodeAtCursor(document.createTextNode(text), editorRef.current);
+    insertNodeAtCursor(document.createTextNode(text), editorRef.current, savedRangeRef.current);
+    saveCurrentSelection();
     markDraftChanged();
     focusEditor();
   };
@@ -102,8 +114,10 @@ export function ChatComposer({ disabled, insertRequest, onSendMessage }: ChatCom
     imagesRef.current.set(id, { file, previewUrl });
     insertNodeAtCursor(
       createImageChipWithTextAnchor(id, file, previewUrl, () => removeDraftImage(id)),
-      editorRef.current
+      editorRef.current,
+      savedRangeRef.current
     );
+    saveCurrentSelection();
     markDraftChanged();
     focusEditor();
   };
@@ -204,8 +218,14 @@ export function ChatComposer({ disabled, insertRequest, onSendMessage }: ChatCom
         contentEditable={!disabled && !sending}
         data-placeholder="输入加密消息"
         suppressContentEditableWarning
-        onInput={markDraftChanged}
+        onFocus={saveCurrentSelection}
+        onInput={() => {
+          saveCurrentSelection();
+          markDraftChanged();
+        }}
         onKeyDown={handleKeyDown}
+        onKeyUp={saveCurrentSelection}
+        onMouseUp={saveCurrentSelection}
         onPaste={handlePaste}
       />
       <Space className="composer-actions">
@@ -256,23 +276,32 @@ function createImageChipWithTextAnchor(id: string, file: File, previewUrl: strin
   return { fragment, anchor };
 }
 
-function insertNodeAtCursor(node: Node | { fragment: DocumentFragment; anchor: Node }, editor: HTMLDivElement | null) {
+function insertNodeAtCursor(
+  node: Node | { fragment: DocumentFragment; anchor: Node },
+  editor: HTMLDivElement | null,
+  savedRange?: Range | null
+) {
   if (!editor) {
     return;
   }
   const insertable = node instanceof Node ? node : node.fragment;
   const cursorAnchor = node instanceof Node ? node : node.anchor;
   const selection = window.getSelection();
-  if (!selection || selection.rangeCount === 0 || !editor.contains(selection.anchorNode)) {
+  const activeRange =
+    selection && selection.rangeCount > 0 && editor.contains(selection.anchorNode)
+      ? selection.getRangeAt(0)
+      : savedRange && editor.contains(savedRange.commonAncestorContainer)
+        ? savedRange
+        : null;
+  if (!activeRange) {
     editor.append(insertable);
     editor.focus();
     placeCursorInsideTextAnchor(cursorAnchor);
     return;
   }
 
-  const range = selection.getRangeAt(0);
-  range.deleteContents();
-  range.insertNode(insertable);
+  activeRange.deleteContents();
+  activeRange.insertNode(insertable);
   editor.focus();
   placeCursorInsideTextAnchor(cursorAnchor);
 }

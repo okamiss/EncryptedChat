@@ -36,9 +36,16 @@ import {
 import { useAutoScrollToBottom } from "../hooks/useAutoScrollToBottom";
 import * as api from "../services/api";
 import { useAuth } from "../state/AuthContext";
-import { appendLocalMessage, getLocalMessages, removeLocalMessage } from "../storage/localMessages";
+import {
+  appendLocalMessage,
+  appendLocalRecallNotice,
+  getLocalMessages,
+  getLocalRecallNotices,
+  removeLocalMessage
+} from "../storage/localMessages";
 import { plainMessageText, prepareComposerMessage, uploadedImageMessage } from "../utils/composerMessages";
 import { displayUserName } from "../utils/displayName";
+import { canManageGroupJoinRequests } from "../utils/groupPermissions";
 import { mentionedUserIdsInText } from "../utils/mentions";
 
 export function GroupChatPage() {
@@ -51,6 +58,7 @@ export function GroupChatPage() {
   const [inviteeId, setInviteeId] = useState<string>();
   const [groupKey, setGroupKey] = useState<CryptoKey | undefined>();
   const [envelopes, setEnvelopes] = useState<EncryptedMessageEnvelope[]>([]);
+  const [recallNotices, setRecallNotices] = useState<MessageRecallPayload[]>([]);
   const [rendered, setRendered] = useState<RenderedMessage[]>([]);
   const [membersOpen, setMembersOpen] = useState(false);
   const [joinRequestsOpen, setJoinRequestsOpen] = useState(false);
@@ -64,7 +72,7 @@ export function GroupChatPage() {
   const myMembership = group?.members.find((member) => member.user.id === user?.id);
   const keyVersion = myMembership?.keyVersion ?? 1;
   const isOwner = group?.ownerId === user?.id;
-  const canManageJoinRequests = myMembership?.role === "owner" || myMembership?.role === "admin";
+  const canManageJoinRequests = canManageGroupJoinRequests(group, groupId, user?.id);
   const friendIds = useMemo(() => new Set(friends.map((friend) => friend.id)), [friends]);
 
   const load = useCallback(async () => {
@@ -94,6 +102,7 @@ export function GroupChatPage() {
 
   useEffect(() => {
     setEnvelopes(getLocalMessages(conversationKey));
+    setRecallNotices(getLocalRecallNotices(conversationKey));
     markConversationRead(conversationKey);
   }, [conversationKey, markConversationRead]);
 
@@ -130,7 +139,11 @@ export function GroupChatPage() {
         return;
       }
       removeLocalMessage(conversationKey, payload.clientMessageId);
+      appendLocalRecallNotice(conversationKey, payload);
       setEnvelopes((current) => current.filter((item) => item.clientMessageId !== payload.clientMessageId));
+      setRecallNotices((current) =>
+        current.some((item) => item.clientMessageId === payload.clientMessageId) ? current : [...current, payload]
+      );
     };
     const handleGroupUpdated = (payload?: { groupId?: string; action?: string }) => {
       if (payload?.groupId === groupId && (payload.action === "deleted" || payload.action === "removed" || payload.action === "left")) {
@@ -180,9 +193,15 @@ export function GroupChatPage() {
           }
         })
       );
+      const recallViews = recallNotices.map((notice): RenderedMessage => {
+        const ownRecall = notice.fromUserId === user.id;
+        const sender = group.members.find((member) => member.user.id === notice.fromUserId)?.user;
+        const senderName = ownRecall ? "我" : sender ? displayUserName(sender) : "群成员";
+        return recalledView(notice, senderName);
+      });
 
       if (!cancelled) {
-        setRendered(views);
+        setRendered([...views, ...recallViews].sort(compareRenderedMessages));
       }
     }
 
@@ -191,7 +210,7 @@ export function GroupChatPage() {
       cancelled = true;
       objectUrls.forEach((url) => URL.revokeObjectURL(url));
     };
-  }, [apiClient, envelopes, group, groupKey, user]);
+  }, [apiClient, envelopes, group, groupKey, recallNotices, user]);
 
   const sendMessage = useCallback(
     async (parts: ComposerMessagePart[]) => {
@@ -257,10 +276,21 @@ export function GroupChatPage() {
         conversationType: "group",
         groupId
       } satisfies MessageRecallPayload);
+      const localNotice: MessageRecallPayload = {
+        clientMessageId: message.clientMessageId,
+        conversationType: "group",
+        groupId,
+        fromUserId: user?.id,
+        recalledAt: new Date().toISOString()
+      };
       removeLocalMessage(conversationKey, message.clientMessageId);
+      appendLocalRecallNotice(conversationKey, localNotice);
       setEnvelopes((current) => current.filter((item) => item.clientMessageId !== message.clientMessageId));
+      setRecallNotices((current) =>
+        current.some((item) => item.clientMessageId === localNotice.clientMessageId) ? current : [...current, localNotice]
+      );
     },
-    [conversationKey, groupId, socket]
+    [conversationKey, groupId, socket, user?.id]
   );
 
   const inviteOptions = friends
@@ -284,7 +314,7 @@ export function GroupChatPage() {
   );
   const headerActions = (
     <>
-      {isOwner && (
+      {canManageJoinRequests && (
         <>
           <Button
             icon={<EditOutlined />}
@@ -295,6 +325,10 @@ export function GroupChatPage() {
           >
             改名
           </Button>
+        </>
+      )}
+      {isOwner && (
+        <>
           <Button
             danger
             icon={<DeleteOutlined />}
@@ -646,6 +680,21 @@ function failedView(envelope: EncryptedMessageEnvelope, own: boolean, senderName
     sentAt: envelope.sentAt,
     status: "failed"
   };
+}
+
+function recalledView(payload: MessageRecallPayload, senderName: string): RenderedMessage {
+  return {
+    clientMessageId: `recall:${payload.clientMessageId}`,
+    own: false,
+    senderName,
+    sentAt: payload.recalledAt,
+    status: "system",
+    text: `${senderName}撤回了一条消息`
+  };
+}
+
+function compareRenderedMessages(a: RenderedMessage, b: RenderedMessage): number {
+  return new Date(a.sentAt ?? 0).getTime() - new Date(b.sentAt ?? 0).getTime();
 }
 
 function quoteTextForMessage(message: RenderedMessage): string | undefined {

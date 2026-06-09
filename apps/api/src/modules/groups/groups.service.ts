@@ -77,7 +77,7 @@ export class GroupsService {
   }
 
   async updateName(ownerId: string, groupId: string, groupName: string): Promise<GroupView> {
-    await this.assertOwner(ownerId, groupId);
+    await this.assertAtLeastAdmin(ownerId, groupId);
     const normalized = groupName.trim();
     if (!normalized) {
       throw new BadRequestException("Group name is required");

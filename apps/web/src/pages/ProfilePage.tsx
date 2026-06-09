@@ -11,12 +11,14 @@ export function ProfilePage() {
     user,
     privateKeyStatus,
     unlockPrivateKey,
+    updatePassword,
     exportPrivateKeyBackup,
     importPrivateKeyBackup,
     refreshMe
   } = useAuth();
   const { message } = App.useApp();
   const [displayNameForm] = Form.useForm<{ displayName?: string }>();
+  const [passwordForm] = Form.useForm<{ currentPassword: string; newPassword: string }>();
   const [backupForm] = Form.useForm<{ password: string }>();
   const [backupFile, setBackupFile] = useState<File>();
   const backupInputRef = useRef<HTMLInputElement>(null);
@@ -103,6 +105,35 @@ export function ProfilePage() {
           </Form.Item>
           <Button type="primary" htmlType="submit" icon={<IdcardOutlined />} disabled={!user}>
             保存显示名称
+          </Button>
+        </Form>
+        <Form
+          form={passwordForm}
+          layout="inline"
+          onFinish={async (values: { currentPassword: string; newPassword: string }) => {
+            try {
+              await updatePassword(values.currentPassword, values.newPassword);
+              passwordForm.resetFields();
+              message.success("密码已更新，私钥仍可使用");
+            } catch (error) {
+              message.error(error instanceof Error ? error.message : "密码更新失败");
+            }
+          }}
+        >
+          <Form.Item name="currentPassword" rules={[{ required: true, message: "请输入当前密码" }]}>
+            <Input.Password placeholder="当前密码" />
+          </Form.Item>
+          <Form.Item
+            name="newPassword"
+            rules={[
+              { required: true, message: "请输入新密码" },
+              { min: 8, message: "新密码至少 8 位" }
+            ]}
+          >
+            <Input.Password placeholder="新密码" />
+          </Form.Item>
+          <Button type="primary" htmlType="submit" icon={<KeyOutlined />} disabled={!user}>
+            更新密码
           </Button>
         </Form>
         {privateKeyStatus !== "ready" && (

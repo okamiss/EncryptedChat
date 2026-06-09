@@ -14,6 +14,7 @@ import type {
   LoginRequest,
   RegisterRequest,
   SafeUser,
+  UpdatePasswordRequest,
   UpdateGroupMemberRoleRequest,
   UpdateGroupRequest,
   UploadEncryptedFileResponse
@@ -52,6 +53,10 @@ export function updatePublicKey(client: ApiClient, publicKey: JsonWebKey) {
 
 export function updateDisplayName(client: ApiClient, displayName?: string | null) {
   return request<SafeUser>("/users/me/display-name", { method: "PATCH", body: { displayName }, client });
+}
+
+export function updatePassword(client: ApiClient, body: UpdatePasswordRequest) {
+  return request<void>("/users/me/password", { method: "PATCH", body, client });
 }
 
 export function findUserByUid(client: ApiClient, uid: string) {

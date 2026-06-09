@@ -1,8 +1,10 @@
-import type { EncryptedMessageEnvelope } from "@encrypted-chat/shared";
+import type { EncryptedMessageEnvelope, MessageRecallPayload } from "@encrypted-chat/shared";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  appendLocalRecallNotice,
   appendLocalMessage,
   conversationKeyForRecall,
+  getLocalRecallNotices,
   getLocalMessages,
   hasLocalMessage,
   removeLocalMessage
@@ -66,5 +68,20 @@ describe("localMessages", () => {
         "user-2"
       )
     ).toBe("direct:user-1");
+  });
+
+  it("stores recalled message notices without duplicating the same client message", () => {
+    const payload: MessageRecallPayload = {
+      clientMessageId: "message-1",
+      conversationType: "group",
+      groupId: "group-1",
+      fromUserId: "user-1",
+      recalledAt: "2026-06-09T08:00:00.000Z"
+    };
+
+    appendLocalRecallNotice("group:group-1", payload);
+    appendLocalRecallNotice("group:group-1", { ...payload, recalledAt: "2026-06-09T09:00:00.000Z" });
+
+    expect(getLocalRecallNotices("group:group-1")).toEqual([payload]);
   });
 });

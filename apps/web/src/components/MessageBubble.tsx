@@ -7,7 +7,7 @@ export interface RenderedMessage {
   own: boolean;
   senderName: string;
   sentAt?: string;
-  status: "decrypted" | "encrypted" | "failed";
+  status: "decrypted" | "encrypted" | "failed" | "system";
   text?: string;
   imageUrl?: string;
   imageName?: string;
@@ -23,6 +23,17 @@ interface MessageBubbleProps {
 }
 
 export function MessageBubble({ message, compact, onMentionSender, onQuoteMessage, onRecallMessage }: MessageBubbleProps) {
+  if (message.status === "system") {
+    return (
+      <div className="message-row system">
+        <div className="message-system-notice">
+          {message.text}
+          {message.sentAt ? ` · ${formatMessageTime(message.sentAt)}` : ""}
+        </div>
+      </div>
+    );
+  }
+
   const canUseActions = !message.own;
   const canQuote = message.status === "decrypted" && Boolean(message.text || message.imageName || message.richParts);
   const peerActions =

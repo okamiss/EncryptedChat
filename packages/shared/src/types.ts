@@ -83,6 +83,11 @@ export interface LoginRequest {
   password: string;
 }
 
+export interface UpdatePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
 export interface CreateFriendRequestRequest {
   addresseeUid: string;
 }

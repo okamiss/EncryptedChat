@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, NotFoundException, UnauthorizedException } from "@nestjs/common";
 import type { SafeUser } from "@encrypted-chat/shared";
 import { Prisma } from "@prisma/client";
+import * as bcrypt from "bcrypt";
 import { presentUser } from "../../common/user-presenter";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -39,5 +40,26 @@ export class UsersService {
       data: { displayName: normalized }
     });
     return presentUser(user);
+  }
+
+  async updatePassword(userId: string, currentPassword: string, newPassword: string): Promise<void> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { passwordHash: true }
+    });
+    if (!user) {
+      throw new NotFoundException("User not found");
+    }
+
+    const passwordMatches = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!passwordMatches) {
+      throw new UnauthorizedException("Current password is incorrect");
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash }
+    });
   }
 }

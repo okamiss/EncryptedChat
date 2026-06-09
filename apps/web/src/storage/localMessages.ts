@@ -28,6 +28,18 @@ export function getLocalMessages(conversationKey: string): EncryptedMessageEnvel
   }
 }
 
+export function getLocalRecallNotices(conversationKey: string): MessageRecallPayload[] {
+  const raw = localStorage.getItem(recallStorageKey(conversationKey));
+  if (!raw) {
+    return [];
+  }
+  try {
+    return JSON.parse(raw) as MessageRecallPayload[];
+  } catch {
+    return [];
+  }
+}
+
 export function appendLocalMessage(conversationKey: string, envelope: EncryptedMessageEnvelope): EncryptedMessageEnvelope[] {
   const messages = getLocalMessages(conversationKey);
   if (!messages.some((message) => message.clientMessageId === envelope.clientMessageId)) {
@@ -47,10 +59,26 @@ export function removeLocalMessage(conversationKey: string, clientMessageId: str
   return messages;
 }
 
+export function appendLocalRecallNotice(
+  conversationKey: string,
+  payload: MessageRecallPayload
+): MessageRecallPayload[] {
+  const notices = getLocalRecallNotices(conversationKey);
+  if (!notices.some((notice) => notice.clientMessageId === payload.clientMessageId)) {
+    notices.push(payload);
+    localStorage.setItem(recallStorageKey(conversationKey), JSON.stringify(notices));
+  }
+  return notices;
+}
+
 export function clearLocalMessages(conversationKey: string): void {
   localStorage.removeItem(storageKey(conversationKey));
 }
 
 function storageKey(conversationKey: string): string {
   return `encrypted-chat:messages:${conversationKey}`;
+}
+
+function recallStorageKey(conversationKey: string): string {
+  return `encrypted-chat:recalls:${conversationKey}`;
 }

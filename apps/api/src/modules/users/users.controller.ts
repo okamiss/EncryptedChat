@@ -1,8 +1,9 @@
-import { Body, Controller, Get, Param, Patch, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Param, Patch, UseGuards } from "@nestjs/common";
 import { CurrentUser } from "../../common/current-user.decorator";
 import type { AuthenticatedUser } from "../../common/authenticated-user";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { UpdateDisplayNameDto } from "./dto/update-display-name.dto";
+import { UpdatePasswordDto } from "./dto/update-password.dto";
 import { UpdatePublicKeyDto } from "./dto/update-public-key.dto";
 import { UsersService } from "./users.service";
 
@@ -29,5 +30,11 @@ export class UsersController {
   @Patch("me/display-name")
   updateDisplayName(@CurrentUser() user: AuthenticatedUser, @Body() body: UpdateDisplayNameDto) {
     return this.usersService.updateDisplayName(user.id, body.displayName);
+  }
+
+  @Patch("me/password")
+  @HttpCode(204)
+  updatePassword(@CurrentUser() user: AuthenticatedUser, @Body() body: UpdatePasswordDto) {
+    return this.usersService.updatePassword(user.id, body.currentPassword, body.newPassword);
   }
 }

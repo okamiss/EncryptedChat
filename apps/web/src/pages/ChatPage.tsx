@@ -13,7 +13,13 @@ import { decryptDirectMessage, encryptDirectMessage, type PlainMessage } from ".
 import { useAutoScrollToBottom } from "../hooks/useAutoScrollToBottom";
 import * as api from "../services/api";
 import { useAuth } from "../state/AuthContext";
-import { appendLocalMessage, getLocalMessages, removeLocalMessage } from "../storage/localMessages";
+import {
+  appendLocalMessage,
+  appendLocalRecallNotice,
+  getLocalMessages,
+  getLocalRecallNotices,
+  removeLocalMessage
+} from "../storage/localMessages";
 import { plainMessageText, prepareComposerMessage, uploadedImageMessage } from "../utils/composerMessages";
 import { displayUserName } from "../utils/displayName";
 
@@ -23,6 +29,7 @@ export function ChatPage() {
   const { message } = App.useApp();
   const [friends, setFriends] = useState<FriendView[]>([]);
   const [envelopes, setEnvelopes] = useState<EncryptedMessageEnvelope[]>([]);
+  const [recallNotices, setRecallNotices] = useState<MessageRecallPayload[]>([]);
   const [rendered, setRendered] = useState<RenderedMessage[]>([]);
   const [composerInsert, setComposerInsert] = useState<ComposerInsertRequest>();
   const messageListRef = useAutoScrollToBottom(rendered);
@@ -39,6 +46,7 @@ export function ChatPage() {
 
   useEffect(() => {
     setEnvelopes(getLocalMessages(conversationKey));
+    setRecallNotices(getLocalRecallNotices(conversationKey));
     markConversationRead(conversationKey);
   }, [conversationKey, markConversationRead]);
 
@@ -74,7 +82,11 @@ export function ChatPage() {
       }
 
       removeLocalMessage(conversationKey, payload.clientMessageId);
+      appendLocalRecallNotice(conversationKey, payload);
       setEnvelopes((current) => current.filter((item) => item.clientMessageId !== payload.clientMessageId));
+      setRecallNotices((current) =>
+        current.some((item) => item.clientMessageId === payload.clientMessageId) ? current : [...current, payload]
+      );
     };
 
     socket.on(SocketEvents.MessageNew, handleNewMessage);
@@ -111,9 +123,13 @@ export function ChatPage() {
           }
         })
       );
+      const recallViews = recallNotices.map((notice): RenderedMessage => {
+        const ownRecall = notice.fromUserId === user.id;
+        return recalledView(notice, ownRecall ? "\u6211" : displayUserName(friend));
+      });
 
       if (!cancelled) {
-        setRendered(views);
+        setRendered([...views, ...recallViews].sort(compareRenderedMessages));
       }
     }
 
@@ -122,7 +138,7 @@ export function ChatPage() {
       cancelled = true;
       objectUrls.forEach((url) => URL.revokeObjectURL(url));
     };
-  }, [apiClient, envelopes, friend, privateKey, user]);
+  }, [apiClient, envelopes, friend, privateKey, recallNotices, user]);
 
   const sendMessage = useCallback(
     async (parts: ComposerMessagePart[]) => {
@@ -183,10 +199,21 @@ export function ChatPage() {
         conversationType: "direct",
         toUserId: friend.id
       } satisfies MessageRecallPayload);
+      const localNotice: MessageRecallPayload = {
+        clientMessageId: message.clientMessageId,
+        conversationType: "direct",
+        fromUserId: user?.id,
+        toUserId: friend.id,
+        recalledAt: new Date().toISOString()
+      };
       removeLocalMessage(conversationKey, message.clientMessageId);
+      appendLocalRecallNotice(conversationKey, localNotice);
       setEnvelopes((current) => current.filter((item) => item.clientMessageId !== message.clientMessageId));
+      setRecallNotices((current) =>
+        current.some((item) => item.clientMessageId === localNotice.clientMessageId) ? current : [...current, localNotice]
+      );
     },
-    [conversationKey, friend, socket]
+    [conversationKey, friend, socket, user?.id]
   );
 
   const friendName = friend ? displayUserName(friend) : "单聊";
@@ -319,6 +346,21 @@ function failedView(envelope: EncryptedMessageEnvelope, own: boolean, senderName
     sentAt: envelope.sentAt,
     status: "failed"
   };
+}
+
+function recalledView(payload: MessageRecallPayload, senderName: string): RenderedMessage {
+  return {
+    clientMessageId: `recall:${payload.clientMessageId}`,
+    own: false,
+    senderName,
+    sentAt: payload.recalledAt,
+    status: "system",
+    text: `${senderName}撤回了一条消息`
+  };
+}
+
+function compareRenderedMessages(a: RenderedMessage, b: RenderedMessage): number {
+  return new Date(a.sentAt ?? 0).getTime() - new Date(b.sentAt ?? 0).getTime();
 }
 
 function quoteTextForMessage(message: RenderedMessage): string | undefined {

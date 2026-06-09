@@ -425,6 +425,12 @@ textarea {
   justify-content: flex-end;
 }
 
+.message-row.system {
+  justify-content: center;
+  align-items: center;
+  margin: 8px 0 14px;
+}
+
 .message-row.compact {
   margin-top: -4px;
 }
@@ -463,6 +469,17 @@ textarea {
   border-radius: 14px 14px 6px 14px;
   background: var(--own-bubble-bg);
   border-color: var(--own-bubble-border);
+}
+
+.message-system-notice {
+  max-width: min(80%, 520px);
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted-text) 10%, transparent);
+  color: var(--muted-text);
+  font-size: 12px;
+  text-align: center;
+  overflow-wrap: anywhere;
 }
 
 .message-meta {

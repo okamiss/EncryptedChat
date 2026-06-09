@@ -29,6 +29,23 @@ describe("ChatComposer", () => {
     );
   });
 
+  it("inserts a system emoji at the remembered caret when the picker has focus", async () => {
+    const onSendMessage = vi.fn().mockResolvedValue(undefined);
+
+    render(<ChatComposer onSendMessage={onSendMessage} />);
+
+    typeIntoComposer("hello");
+    placeCaretInComposerText(2);
+    clickEmojiPickerButton();
+    const emoji = document.querySelector(".emoji-option") as HTMLButtonElement;
+    const emojiText = emoji.textContent ?? "";
+    moveSelectionOutsideComposer(emoji);
+    fireEvent.click(emoji);
+    clickSendButton();
+
+    await waitFor(() => expect(onSendMessage).toHaveBeenCalledWith([{ type: "text", text: `he${emojiText}llo` }]));
+  });
+
   it("offers additional emojis in the emoji picker", async () => {
     const onSendMessage = vi.fn().mockResolvedValue(undefined);
 
@@ -187,4 +204,43 @@ function typeAtCurrentSelection(text: string) {
   selection?.removeAllRanges();
   selection?.addRange(range);
   fireEvent.input(composer);
+}
+
+function clickSendButton() {
+  const sendButton = document.querySelector(".composer-actions button");
+  if (!sendButton) {
+    throw new Error("Send button not found");
+  }
+  fireEvent.click(sendButton);
+}
+
+function clickEmojiPickerButton() {
+  const emojiButton = document.querySelector(".composer-toolbar button");
+  if (!emojiButton) {
+    throw new Error("Emoji button not found");
+  }
+  fireEvent.click(emojiButton);
+}
+
+function placeCaretInComposerText(offset: number) {
+  const composer = screen.getByRole("textbox");
+  const textNode = composer.firstChild;
+  if (!textNode) {
+    throw new Error("Composer has no text node");
+  }
+  const range = document.createRange();
+  range.setStart(textNode, offset);
+  range.collapse(true);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  fireEvent.keyUp(composer);
+}
+
+function moveSelectionOutsideComposer(node: Node) {
+  const range = document.createRange();
+  range.selectNode(node);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
 }

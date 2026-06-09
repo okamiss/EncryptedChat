@@ -14,6 +14,7 @@ import * as api from "../services/api";
 import { createChatSocket } from "../services/socket";
 import {
   appendLocalMessage,
+  appendLocalRecallNotice,
   conversationKeyForEnvelope,
   conversationKeyForRecall,
   hasLocalMessage,
@@ -41,6 +42,7 @@ interface AuthContextValue {
   register: (username: string, password: string) => Promise<void>;
   login: (username: string, password: string) => Promise<void>;
   unlockPrivateKey: (password: string) => Promise<void>;
+  updatePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   exportPrivateKeyBackup: () => Promise<string>;
   importPrivateKeyBackup: (backupText: string, password: string) => Promise<void>;
   logout: () => void;
@@ -131,6 +133,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setPrivateKeyStatus("ready");
     },
     [user]
+  );
+
+  const updatePassword = useCallback(
+    async (currentPassword: string, newPassword: string) => {
+      if (!user) {
+        throw new Error("请先登录");
+      }
+      const record = await getPrivateKeyRecord(user.id);
+      if (!record) {
+        throw new Error("当前浏览器没有保存私钥，无法安全更新密码");
+      }
+      const unlocked = await decryptPrivateKeyFromStorage(record, currentPassword);
+      const privateJwk = await exportPrivateKey(unlocked);
+      const encryptedPrivateKey = await encryptPrivateKeyForStorage(privateJwk, newPassword);
+
+      await api.updatePassword(apiClient, { currentPassword, newPassword });
+      await savePrivateKeyRecord({
+        ...record,
+        ...encryptedPrivateKey
+      });
+      setPrivateKey(unlocked);
+      setPrivateKeyStatus("ready");
+    },
+    [apiClient, user]
   );
 
   const exportPrivateKeyBackup = useCallback(async () => {
@@ -246,6 +272,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const handleMessageRecalled = (payload: MessageRecallPayload) => {
       const key = conversationKeyForRecall(payload, user.id);
       removeLocalMessage(key, payload.clientMessageId);
+      appendLocalRecallNotice(key, payload);
     };
     nextSocket.on(SocketEvents.MessageNew, handleMessage);
     nextSocket.on(SocketEvents.MessageRecalled, handleMessageRecalled);
@@ -275,6 +302,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         register,
         login,
         unlockPrivateKey,
+        updatePassword,
         exportPrivateKeyBackup,
         importPrivateKeyBackup,
         logout,
