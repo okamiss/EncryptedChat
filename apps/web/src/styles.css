@@ -448,6 +448,13 @@ textarea {
   box-shadow: var(--shadow-soft);
 }
 
+.message-jump-latest .ant-badge-count {
+  transition:
+    transform 160ms ease,
+    opacity 160ms ease,
+    background 160ms ease;
+}
+
 .message-row {
   display: flex;
   align-items: flex-end;

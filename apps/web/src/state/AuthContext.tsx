@@ -1,4 +1,10 @@
-import type { AuthResponse, EncryptedMessageEnvelope, MessageRecallPayload, SafeUser } from "@encrypted-chat/shared";
+import type {
+  AuthResponse,
+  EncryptedMessageEnvelope,
+  MessageRecallPayload,
+  PresencePayload,
+  SafeUser
+} from "@encrypted-chat/shared";
 import { SocketEvents } from "@encrypted-chat/shared";
 import { App } from "antd";
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
@@ -40,6 +46,7 @@ interface AuthContextValue {
   apiClient: api.ApiClient;
   unreadConversationKeys: string[];
   unreadConversationCounts: Record<string, number>;
+  onlineUserIds: string[];
   register: (username: string, password: string) => Promise<void>;
   login: (username: string, password: string) => Promise<void>;
   unlockPrivateKey: (password: string) => Promise<void>;
@@ -67,6 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [privateKeyStatus, setPrivateKeyStatus] = useState<PrivateKeyStatus>("locked");
   const [socket, setSocket] = useState<Socket | undefined>();
   const [unreadConversationCounts, setUnreadConversationCounts] = useState<Record<string, number>>({});
+  const [onlineUserIds, setOnlineUserIds] = useState<string[]>([]);
 
   const apiClient = useMemo(() => ({ token }), [token]);
   const unreadConversationKeys = useMemo(() => Object.keys(unreadConversationCounts), [unreadConversationCounts]);
@@ -215,6 +223,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setPrivateKey(undefined);
     setPrivateKeyStatus("locked");
     setUnreadConversationCounts({});
+    setOnlineUserIds([]);
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
   }, [socket]);
@@ -276,8 +285,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       removeLocalMessage(key, payload.clientMessageId);
       appendLocalRecallNotice(key, payload, originalSentAt);
     };
+    const handlePresenceUpdate = (payload: PresencePayload) => {
+      setOnlineUserIds((current) => {
+        const next = new Set(current);
+        if (payload.online) {
+          next.add(payload.userId);
+        } else {
+          next.delete(payload.userId);
+        }
+        return Array.from(next);
+      });
+    };
     nextSocket.on(SocketEvents.MessageNew, handleMessage);
     nextSocket.on(SocketEvents.MessageRecalled, handleMessageRecalled);
+    nextSocket.on(SocketEvents.PresenceUpdate, handlePresenceUpdate);
     nextSocket.on("connect_error", () => {
       message.error("实时连接失败，请确认后端服务和 JWT 状态。");
     });
@@ -285,6 +306,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       nextSocket.off(SocketEvents.MessageNew, handleMessage);
       nextSocket.off(SocketEvents.MessageRecalled, handleMessageRecalled);
+      nextSocket.off(SocketEvents.PresenceUpdate, handlePresenceUpdate);
       nextSocket.disconnect();
       setSocket(undefined);
     };
@@ -301,6 +323,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         apiClient,
         unreadConversationKeys,
         unreadConversationCounts,
+        onlineUserIds,
         register,
         login,
         unlockPrivateKey,

@@ -48,11 +48,12 @@ import { plainMessageText, prepareComposerMessage, uploadedImageMessage } from "
 import { displayUserName } from "../utils/displayName";
 import { canManageGroupJoinRequests } from "../utils/groupPermissions";
 import { mentionedUserIdsInText } from "../utils/mentions";
+import { countOnlineGroupMembers } from "./groupPresence";
 
 export function GroupChatPage() {
   const { groupId = "" } = useParams();
   const navigate = useNavigate();
-  const { apiClient, user, privateKey, socket, unreadConversationCounts, markConversationRead } = useAuth();
+  const { apiClient, user, privateKey, socket, unreadConversationCounts, onlineUserIds, markConversationRead } = useAuth();
   const { message, modal } = App.useApp();
   const [group, setGroup] = useState<GroupView | undefined>();
   const [friends, setFriends] = useState<FriendView[]>([]);
@@ -308,7 +309,10 @@ export function GroupChatPage() {
     .map((friend) => ({ label: `${displayUserName(friend)} · ${friend.uid}`, value: friend.id }));
 
   const groupTitle = group?.name ?? "群聊";
-  const groupSubtitle = group ? `群号 ${group.code} · ${group.members.length} 位成员` : "正在加载";
+  const onlineMemberCount = countOnlineGroupMembers(group, onlineUserIds);
+  const groupSubtitle = group
+    ? `群号 ${group.code} · ${group.members.length} 位成员 · ${onlineMemberCount} 人在线`
+    : "正在加载";
   const profilePanel = (
     <UserProfilePanel
       title={groupTitle}

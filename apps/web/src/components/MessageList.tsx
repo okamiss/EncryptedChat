@@ -19,6 +19,7 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(function
   const listRef = useRef<HTMLDivElement | null>(null);
   const unreadMarkerRef = useRef<HTMLDivElement | null>(null);
   const [showUnreadJump, setShowUnreadJump] = useState(false);
+  const [remainingUnreadCount, setRemainingUnreadCount] = useState(unreadCount);
   const unreadStartIndex = useMemo(() => {
     if (unreadCount <= 0) {
       return -1;
@@ -36,14 +37,49 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(function
     return Boolean(list && unreadCount > 0 && list.scrollHeight > list.clientHeight + 8);
   };
 
+  const countUnreadNotYetPassed = () => {
+    const list = listRef.current;
+    if (!list) {
+      return unreadCount;
+    }
+    const listTop = list.getBoundingClientRect().top;
+    const unreadRows = Array.from(list.querySelectorAll<HTMLElement>("[data-unread-message='true']"));
+    if (unreadRows.length === 0) {
+      return unreadCount;
+    }
+    const rects = unreadRows.map((row) => row.getBoundingClientRect());
+    if (rects.every((rect) => rect.top === 0 && rect.bottom === 0)) {
+      return unreadCount;
+    }
+    return rects.filter((rect) => rect.bottom > listTop + 1).length;
+  };
+
+  const updateUnreadJump = () => {
+    const list = listRef.current;
+    if (!list || !hasUnreadOverflow()) {
+      setShowUnreadJump(false);
+      setRemainingUnreadCount(unreadCount);
+      return;
+    }
+    const distanceToBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
+    const nextRemaining = countUnreadNotYetPassed();
+    setRemainingUnreadCount(nextRemaining);
+    setShowUnreadJump(distanceToBottom > 24 && nextRemaining > 0);
+  };
+
   const jumpToLatest = () => {
     const list = listRef.current;
     if (list) {
       list.scrollTop = list.scrollHeight;
     }
+    setRemainingUnreadCount(0);
     setShowUnreadJump(false);
     onJumpToLatest?.();
   };
+
+  useEffect(() => {
+    setRemainingUnreadCount(unreadCount);
+  }, [unreadCount]);
 
   useEffect(() => {
     const list = listRef.current;
@@ -70,27 +106,18 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(function
     return () => cancelAnimationFrame(frameId);
   }, [showUnreadJump]);
 
-  const handleScroll = () => {
-    const list = listRef.current;
-    if (!list || !hasUnreadOverflow()) {
-      setShowUnreadJump(false);
-      return;
-    }
-    const distanceToBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
-    setShowUnreadJump(distanceToBottom > 24);
-  };
-
   return (
-    <div className="message-list" ref={setListRef} onScroll={handleScroll}>
+    <div className="message-list" ref={setListRef} onScroll={updateUnreadJump}>
       {messages.length === 0 ? (
-        <Empty description="鏆傛棤娑堟伅" />
+        <Empty description="暂无消息" />
       ) : (
         <Space direction="vertical" size={0} style={{ width: "100%" }}>
           {messages.map((item, index) => {
             const previous = messages[index - 1];
             const compact = previous && previous.senderName === item.senderName && previous.own === item.own;
+            const unread = unreadStartIndex >= 0 && index >= unreadStartIndex;
             return (
-              <div key={item.clientMessageId}>
+              <div key={item.clientMessageId} data-message-id={item.clientMessageId} data-unread-message={unread ? "true" : undefined}>
                 {showUnreadJump && index === unreadStartIndex && (
                   <div ref={unreadMarkerRef} className="message-unread-divider">
                     以下为新消息
@@ -115,13 +142,13 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(function
           shape="circle"
           type="primary"
           icon={
-            <Badge count={unreadCount} overflowCount={99} offset={[2, -2]}>
+            <Badge count={remainingUnreadCount} overflowCount={99} offset={[2, -2]}>
               <DownOutlined />
             </Badge>
           }
           onClick={jumpToLatest}
         >
-          <span className="visually-hidden">{unreadCount} 条新消息</span>
+          <span className="visually-hidden">{remainingUnreadCount} 条新消息</span>
         </Button>
       )}
     </div>
