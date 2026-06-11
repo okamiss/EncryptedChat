@@ -327,6 +327,10 @@ textarea {
   background: var(--warning-soft);
 }
 
+.key-status-alert .ant-alert-action {
+  align-self: center;
+}
+
 .surface {
   min-height: 0;
   background: var(--panel-bg);
@@ -338,6 +342,133 @@ textarea {
 
 .app-content > .surface:not(.chat-main) {
   overflow: auto;
+}
+
+.profile-page {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+}
+
+.profile-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--section-border);
+}
+
+.profile-page-header h3,
+.profile-overview h4,
+.profile-section-heading h5 {
+  margin: 0;
+}
+
+.profile-overview {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+}
+
+.profile-overview-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.profile-overview-copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.profile-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.profile-info-item {
+  min-width: 0;
+  min-height: 58px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--section-border);
+  border-radius: 8px;
+  background: var(--panel-bg-soft);
+}
+
+.profile-info-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.profile-info-item > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.profile-info-item .ant-typography:last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.profile-action-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.9fr) minmax(320px, 1.1fr);
+  gap: 14px;
+}
+
+.profile-action-section {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--section-border);
+}
+
+.profile-section-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--primary);
+}
+
+.profile-action-section .ant-form-item {
+  margin-bottom: 12px;
+}
+
+.profile-backup-section {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.profile-backup-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.profile-backup-import {
+  max-width: 420px;
 }
 
 .chat-workspace {
@@ -971,5 +1102,20 @@ textarea {
 
   .split-grid {
     grid-template-columns: 1fr;
+  }
+
+  .profile-page-header,
+  .profile-backup-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .profile-info-grid,
+  .profile-action-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-backup-import {
+    max-width: none;
   }
 }

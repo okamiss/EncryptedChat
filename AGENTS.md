@@ -1,76 +1,183 @@
-Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
+# AGENTS.md
 
-**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+## Behavioral Guidelines
 
-## 1. Think Before Coding
+These guidelines exist to reduce common LLM coding mistakes.
 
-**Don't assume. Don't hide confusion. Surface tradeoffs.**
-
-Before implementing:
-
-- State your assumptions explicitly. If uncertain, ask.
-- If multiple interpretations exist, present them - don't pick silently.
-- If a simpler approach exists, say so. Push back when warranted.
-- If something is unclear, stop. Name what's confusing. Ask.
-
-## 2. Simplicity First
-
-**Minimum code that solves the problem. Nothing speculative.**
-
-- No features beyond what was asked.
-- No abstractions for single-use code.
-- No "flexibility" or "configurability" that wasn't requested.
-- No error handling for impossible scenarios.
-- If you write 200 lines and it could be 50, rewrite it.
-
-Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
-
-## 3. Surgical Changes
-
-**Touch only what you must. Clean up only your own mess.**
-
-When editing existing code:
-
-- Don't "improve" adjacent code, comments, or formatting.
-- Don't refactor things that aren't broken.
-- Match existing style, even if you'd do it differently.
-- If you notice unrelated dead code, mention it - don't delete it.
-
-When your changes create orphans:
-
-- Remove imports/variables/functions that YOUR changes made unused.
-- Don't remove pre-existing dead code unless asked.
-
-The test: Every changed line should trace directly to the user's request.
-
-## 4. Goal-Driven Execution
-
-**Define success criteria. Loop until verified.**
-
-Transform tasks into verifiable goals:
-
-- "Add validation" → "Write tests for invalid inputs, then make them pass"
-- "Fix the bug" → "Write a test that reproduces it, then make it pass"
-- "Refactor X" → "Ensure tests pass before and after"
-
-For multi-step tasks, state a brief plan:
-
-```
-1. [Step] → verify: [check]
-2. [Step] → verify: [check]
-3. [Step] → verify: [check]
-```
-
-Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+Tradeoff: prioritize correctness and maintainability over speed. For trivial tasks, use reasonable judgment.
 
 ---
 
-**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+## 1. Think Before Coding
 
-## CodeGraph
+Don't assume. Don't hide uncertainty. Surface tradeoffs.
 
-本项目已使用 CodeGraph。分析代码结构、查找函数、调用链、影响范围时，优先使用 CodeGraph MCP 工具，不要一开始就用 grep / 全局读取文件。
-如果 `.codegraph/` 不存在，请先运行：
+Before implementing:
 
+- State assumptions explicitly.
+- If requirements are ambiguous, ask clarifying questions.
+- If multiple interpretations exist, present them instead of choosing silently.
+- If a simpler solution exists, mention it.
+- Push back on unnecessary complexity when appropriate.
+- If something is unclear, stop and explain what is unclear.
+
+Never invent requirements that were not provided.
+
+---
+
+## 2. Simplicity First
+
+Write the minimum code necessary to solve the problem.
+
+- No speculative features.
+- No premature abstractions.
+- No configurability unless requested.
+- No future-proofing unless requested.
+- No handling of impossible scenarios.
+- No unnecessary layers of indirection.
+
+Before finishing, ask:
+
+> Is there a simpler implementation that satisfies the requirement?
+
+If yes, prefer the simpler version.
+
+---
+
+## 3. Surgical Changes
+
+Modify only what is required.
+
+When editing existing code:
+
+- Do not refactor unrelated code.
+- Do not reformat unrelated files.
+- Do not rename unrelated symbols.
+- Do not change comments unrelated to the task.
+- Follow existing project conventions.
+
+If your change creates unused code:
+
+- Remove imports made unused by your changes.
+- Remove variables made unused by your changes.
+- Remove functions made unused by your changes.
+
+Do not remove pre-existing dead code unless explicitly requested.
+
+Every changed line should be traceable to the user's request.
+
+---
+
+## 4. Goal-Driven Execution
+
+Convert requests into verifiable outcomes.
+
+Examples:
+
+- "Fix a bug" → create a reproduction and verify it is fixed.
+- "Add validation" → verify invalid inputs fail correctly.
+- "Refactor code" → verify behavior remains unchanged.
+
+For non-trivial tasks, create a short execution plan:
+
+1. Analyze
+2. Implement
+3. Verify
+
+For larger tasks:
+
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+
+Do not stop until success criteria have been verified.
+
+---
+
+## 5. Verify Before Declaring Success
+
+Never assume a change works.
+
+When possible:
+
+- Run tests.
+- Run type checking.
+- Run linting.
+- Build the project.
+- Verify affected functionality.
+
+If verification cannot be performed:
+
+- Explicitly state what could not be verified.
+- Explain why.
+- Describe remaining risks.
+
+Do not claim success without verification.
+
+---
+
+## 6. CodeGraph (Required)
+
+This repository uses CodeGraph.
+
+Before performing code analysis, debugging, refactoring, or feature implementation:
+
+- Use CodeGraph MCP tools as the primary navigation mechanism.
+- Use CodeGraph to locate symbols, references, callers, callees, dependencies, and impact scope.
+- Use CodeGraph to understand architecture before reading files.
+- Determine affected code paths before making changes.
+
+Do NOT start with:
+
+- grep
+- ripgrep
+- find
+- global text search
+- reading large portions of the repository
+
+Read source files only after the relevant locations have been identified through CodeGraph.
+
+If CodeGraph is not initialized:
+
+```bash
 codegraph init -i
+```
 
+Preferred workflow:
+
+1. Analyze repository structure with CodeGraph.
+2. Locate relevant symbols and references.
+3. Trace dependencies and call chains.
+4. Determine impact scope.
+5. Read only necessary files.
+6. Implement changes.
+7. Verify changes.
+
+---
+
+## 7. Decision Making
+
+When multiple solutions are possible:
+
+- Prefer the smallest change.
+- Prefer the least risky change.
+- Prefer the most maintainable change.
+- Prefer consistency with the existing codebase.
+
+Avoid introducing new patterns unless required.
+
+---
+
+## 8. Communication
+
+Before coding:
+
+- Briefly explain the plan.
+
+After coding:
+
+- Summarize what changed.
+- Summarize how it was verified.
+- Mention any limitations or risks.
+
+Be concise.

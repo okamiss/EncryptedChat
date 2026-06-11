@@ -1,7 +1,5 @@
-import { LockOutlined } from "@ant-design/icons";
 import { SocketEvents } from "@encrypted-chat/shared";
 import type { FriendView, GroupView } from "@encrypted-chat/shared";
-import { Alert } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { AddFriendPage } from "./pages/AddFriendPage";
@@ -16,6 +14,7 @@ import { RegisterPage } from "./pages/RegisterPage";
 import * as api from "./services/api";
 import { useAuth } from "./state/AuthContext";
 import { ConversationList } from "./components/ConversationList";
+import { PrivateKeyUnlockPrompt } from "./components/PrivateKeyUnlockPrompt";
 import { SidebarNav } from "./components/SidebarNav";
 
 export function AppRoutes() {
@@ -49,7 +48,7 @@ function ProtectedRoute() {
 }
 
 function AppLayout() {
-  const { apiClient, user, privateKeyStatus, logout, socket, unreadConversationCounts } = useAuth();
+  const { apiClient, user, logout, socket, unreadConversationCounts } = useAuth();
   const location = useLocation();
   const [friends, setFriends] = useState<FriendView[]>([]);
   const [groups, setGroups] = useState<GroupView[]>([]);
@@ -122,15 +121,7 @@ function AppLayout() {
       />
       <ConversationList friends={friends} groups={groups} unreadConversationCounts={unreadConversationCounts} />
       <main className="app-content">
-        {privateKeyStatus !== "ready" && (
-          <Alert
-            className="key-status-alert"
-            type="warning"
-            showIcon
-            icon={<LockOutlined />}
-            message={privateKeyStatus === "missing" ? "当前浏览器没有私钥，无法解密消息。" : "私钥尚未解锁。"}
-          />
-        )}
+        <PrivateKeyUnlockPrompt />
         <Outlet />
       </main>
     </div>
